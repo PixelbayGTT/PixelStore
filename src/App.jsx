@@ -1,8 +1,8 @@
-﻿import React, { useState, useEffect, useMemo } from 'react';
+﻿import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   ShoppingCart, Package, Users, TrendingUp, Plus, Trash2, Edit, X, 
   Menu, Search, LogOut, ChevronRight, Store, CreditCard, CheckCircle, 
-  AlertCircle, LayoutDashboard, Smartphone, Mail, Info, ArrowLeft
+  AlertCircle, LayoutDashboard, Smartphone, Mail, Info, ArrowLeft, Bell
 } from 'lucide-react';
 
 // --- FIREBASE IMPORTS ---
@@ -37,6 +37,9 @@ const firebaseConfig = {
 // Nombre de la colección principal
 const COLLECTION_NAME = "tienda_digital_gt_v2";
 
+// Sonido de notificación (Ding simple)
+const NOTIFICATION_SOUND = "data:audio/wav;base64,UklGRl9vT1BXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YU"; // Versión corta para evitar bloque, usaremos un Audio object real abajo
+
 // ==========================================
 // INICIALIZACIÓN
 // ==========================================
@@ -52,6 +55,31 @@ if (isConfigured) {
     console.error("Error inicializando Firebase:", error);
   }
 }
+
+// Función auxiliar para reproducir sonido
+const playSound = () => {
+  try {
+    // Un sonido de "campana" simple generado sintéticamente o un beep
+    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    const oscillator = audioContext.createOscillator();
+    const gainNode = audioContext.createGain();
+    
+    oscillator.connect(gainNode);
+    gainNode.connect(audioContext.destination);
+    
+    oscillator.type = 'sine';
+    oscillator.frequency.setValueAtTime(500, audioContext.currentTime);
+    oscillator.frequency.exponentialRampToValueAtTime(1000, audioContext.currentTime + 0.1);
+    
+    gainNode.gain.setValueAtTime(0.1, audioContext.currentTime);
+    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
+    
+    oscillator.start();
+    oscillator.stop(audioContext.currentTime + 0.5);
+  } catch (e) {
+    console.error("Audio error", e);
+  }
+};
 
 // --- COMPONENTE PRINCIPAL ---
 export default function OnlineStoreApp() {
@@ -77,7 +105,10 @@ export default function OnlineStoreApp() {
   const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
   const [notification, setNotification] = useState(null);
-  const [selectedProduct, setSelectedProduct] = useState(null); // Estado para producto seleccionado
+  const [selectedProduct, setSelectedProduct] = useState(null);
+  
+  // Referencia para controlar la primera carga y no notificar pedidos viejos
+  const isFirstLoad = useRef(true);
 
   // --- AUTENTICACIÓN Y CARGA DE DATOS ---
   useEffect(() => {
@@ -104,6 +135,36 @@ export default function OnlineStoreApp() {
     }, (e) => console.error(e));
 
     const unsubOrders = onSnapshot(ordersRef, (snapshot) => {
+      // Detección de nuevos pedidos en tiempo real
+      if (!isFirstLoad.current) {
+        snapshot.docChanges().forEach((change) => {
+          if (change.type === "added") {
+            const newOrder = change.doc.data();
+            
+            // Verificar si soy admin (leemos localStorage para tener el dato más fresco dentro del callback)
+            const amIAdmin = localStorage.getItem('isAdminAuthenticated') === 'true';
+            
+            if (amIAdmin) {
+               // 1. Sonido
+               playSound();
+               
+               // 2. Notificación en App
+               showNotification(`¡Nueva orden de ${newOrder.customer?.name || 'Cliente'}!`, 'success');
+               
+               // 3. Notificación de Navegador (si está permitida)
+               if (Notification.permission === "granted") {
+                 new Notification("¡Nueva Orden Recibida! 💰", {
+                   body: `Cliente: ${newOrder.customer?.name}\nTotal: Q${newOrder.total?.toFixed(2)}`,
+                   icon: '/vite.svg' // Icono genérico
+                 });
+               }
+            }
+          }
+        });
+      } else {
+        isFirstLoad.current = false;
+      }
+
       const ords = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       ords.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
       setOrders(ords);
@@ -133,7 +194,6 @@ export default function OnlineStoreApp() {
   const updateQty = (productId, delta) => {
     setCart(prev => prev.map(item => {
       if (item.id === productId) {
-        // Encontrar producto real para checar stock maximo
         const realProduct = products.find(p => p.id === productId);
         const maxStock = realProduct ? realProduct.stock : 99;
         
@@ -159,7 +219,7 @@ export default function OnlineStoreApp() {
   // --- NOTIFICACIONES ---
   const showNotification = (msg, type = 'info') => {
     setNotification({ msg, type });
-    setTimeout(() => setNotification(null), 4000); 
+    setTimeout(() => setNotification(null), 5000); 
   };
 
   // --- RENDER ---
@@ -239,7 +299,7 @@ function StoreFront({ products, addToCart, onProductClick }) {
     <div className="space-y-6">
       <div className="bg-gradient-to-r from-gray-900 to-indigo-900 rounded-2xl p-8 text-center text-white shadow-lg">
         <h1 className="text-3xl font-bold mb-2">Productos Digitales Premium</h1>
-        <p className="text-indigo-200">Entrega rapida y segura</p>
+        <p className="text-indigo-200">Entrega inmediata y segura.</p>
       </div>
 
       <div className="flex justify-between items-center bg-white p-4 rounded-xl shadow-sm">
@@ -413,10 +473,8 @@ function CheckoutView({ cart, total, clearCart, setView, user, showNotification 
     setIsSubmitting(true);
 
     try {
-      // Usar Batch para crear orden Y descontar stock atómicamente
       const batch = writeBatch(db);
 
-      // 1. Crear referencia de nueva orden
       const newOrderRef = doc(collection(db, COLLECTION_NAME, 'data', 'orders'));
       batch.set(newOrderRef, {
         items: cart,
@@ -427,7 +485,6 @@ function CheckoutView({ cart, total, clearCart, setView, user, showNotification 
         userId: user?.uid || 'anon'
       });
 
-      // 2. Descontar stock de cada producto
       cart.forEach(item => {
         const productRef = doc(db, COLLECTION_NAME, 'data', 'products', item.id);
         batch.update(productRef, {
@@ -435,11 +492,9 @@ function CheckoutView({ cart, total, clearCart, setView, user, showNotification 
         });
       });
 
-      // 3. Ejecutar todo junto
       await batch.commit();
 
       clearCart();
-      // Mensaje actualizado
       showNotification("Pedido registrado. Le contactaremos en un lapso de 6 horas.", "success");
       setView('store');
 
@@ -457,7 +512,6 @@ function CheckoutView({ cart, total, clearCart, setView, user, showNotification 
         <CreditCard className="mr-2 text-indigo-600" /> Confirmar Pedido
       </h2>
       
-      {/* Mensaje Informativo Profesional */}
       <div className="bg-blue-50 border border-blue-100 p-4 rounded-lg mb-6 flex items-start">
         <Info className="text-blue-600 w-5 h-5 mr-3 mt-1 flex-shrink-0" />
         <div className="text-sm text-blue-800">
@@ -510,6 +564,24 @@ function CheckoutView({ cart, total, clearCart, setView, user, showNotification 
 function AdminDashboard({ products, orders, showNotification }) {
   const [tab, setTab] = useState('inventory');
   
+  // Solicitar permisos de notificación
+  const requestNotificationPermission = async () => {
+    const result = await Notification.requestPermission();
+    if (result === 'granted') {
+      showNotification("Notificaciones activadas correctamente", "success");
+      // Prueba de sonido
+      const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      const oscillator = audioContext.createOscillator();
+      const gainNode = audioContext.createGain();
+      oscillator.connect(gainNode);
+      gainNode.connect(audioContext.destination);
+      oscillator.start();
+      oscillator.stop(audioContext.currentTime + 0.1);
+    } else {
+      showNotification("Permiso denegado. Revisa la configuración del navegador.", "error");
+    }
+  };
+  
   // Cálculos de estadísticas
   const totalStock = products.reduce((acc, p) => acc + (p.stock || 0), 0);
   const totalRevenue = orders.reduce((acc, o) => acc + (o.total || 0), 0);
@@ -550,9 +622,14 @@ function AdminDashboard({ products, orders, showNotification }) {
 
       <div className="flex justify-between items-center">
         <h1 className="text-2xl font-bold text-gray-800">Gestión</h1>
-        <div className="flex bg-white p-1 rounded-lg border">
-          <button onClick={() => setTab('inventory')} className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${tab === 'inventory' ? 'bg-indigo-100 text-indigo-700' : 'text-gray-600 hover:bg-gray-50'}`}>Inventario</button>
-          <button onClick={() => setTab('orders')} className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${tab === 'orders' ? 'bg-indigo-100 text-indigo-700' : 'text-gray-600 hover:bg-gray-50'}`}>Pedidos</button>
+        <div className="flex gap-2">
+            <button onClick={requestNotificationPermission} className="flex items-center px-4 py-2 bg-yellow-100 text-yellow-700 rounded-md text-sm font-medium hover:bg-yellow-200" title="Activar alertas sonoras y visuales">
+                <Bell className="w-4 h-4 mr-2" /> Activar Alertas
+            </button>
+            <div className="flex bg-white p-1 rounded-lg border">
+              <button onClick={() => setTab('inventory')} className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${tab === 'inventory' ? 'bg-indigo-100 text-indigo-700' : 'text-gray-600 hover:bg-gray-50'}`}>Inventario</button>
+              <button onClick={() => setTab('orders')} className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${tab === 'orders' ? 'bg-indigo-100 text-indigo-700' : 'text-gray-600 hover:bg-gray-50'}`}>Pedidos</button>
+            </div>
         </div>
       </div>
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden min-h-[500px]">
@@ -642,7 +719,6 @@ function OrdersManager({ orders, showNotification }) {
     try { await updateDoc(doc(db, COLLECTION_NAME, 'data', 'orders', id), { status }); showNotification("Actualizado", "success"); } catch (e) { showNotification("Error", "error"); }
   };
 
-  // Función para eliminar pedidos
   const handleDeleteOrder = async (id) => {
     if (window.confirm('¿Estás seguro de eliminar este pedido permanentemente?')) {
         try {
@@ -679,7 +755,6 @@ function OrdersManager({ orders, showNotification }) {
                   <div className="text-xs text-gray-400 mt-1 font-mono">{new Date(order.createdAt?.seconds * 1000).toLocaleDateString()}</div>
                 </td>
                 
-                {/* COLUMNA DE DETALLE CORREGIDA */}
                 <td className="px-6 py-4">
                   <div className="space-y-1">
                     {order.items?.map((item, index) => (
@@ -701,7 +776,6 @@ function OrdersManager({ orders, showNotification }) {
                     {order.status === 'pending' && <button onClick={() => updateStatus(order.id, 'shipped')} className="block w-full text-center bg-blue-50 text-blue-600 px-2 py-1 rounded border border-blue-200 hover:bg-blue-100 text-xs">Marcar Enviado</button>}
                     {order.status === 'shipped' && <button onClick={() => updateStatus(order.id, 'delivered')} className="block w-full text-center bg-green-50 text-green-600 px-2 py-1 rounded border border-green-200 hover:bg-green-100 text-xs">Finalizar</button>}
                     
-                    {/* Botón de eliminar pedido */}
                     <button onClick={() => handleDeleteOrder(order.id)} className="block w-full text-center bg-red-50 text-red-600 px-2 py-1 rounded border border-red-200 hover:bg-red-100 text-xs flex items-center justify-center">
                         <Trash2 className="w-3 h-3 mr-1" /> Eliminar
                     </button>
