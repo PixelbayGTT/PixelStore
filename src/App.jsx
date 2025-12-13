@@ -2,7 +2,7 @@
 import { 
   ShoppingCart, Package, Users, TrendingUp, Plus, Trash2, Edit, X, 
   Menu, Search, LogOut, ChevronRight, Store, CreditCard, CheckCircle, 
-  AlertCircle, LayoutDashboard, Smartphone, Mail, Info
+  AlertCircle, LayoutDashboard, Smartphone, Mail, Info, ArrowLeft
 } from 'lucide-react';
 
 // --- FIREBASE IMPORTS ---
@@ -77,6 +77,7 @@ export default function OnlineStoreApp() {
   const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
   const [notification, setNotification] = useState(null);
+  const [selectedProduct, setSelectedProduct] = useState(null); // Estado para producto seleccionado
 
   // --- AUTENTICACIÓN Y CARGA DE DATOS ---
   useEffect(() => {
@@ -147,13 +148,18 @@ export default function OnlineStoreApp() {
     }));
   };
 
+  const handleProductClick = (product) => {
+    setSelectedProduct(product);
+    setView('product-details');
+  };
+
   const cartTotal = useMemo(() => cart.reduce((t, i) => t + (i.price * i.qty), 0), [cart]);
   const clearCart = () => setCart([]);
 
   // --- NOTIFICACIONES ---
   const showNotification = (msg, type = 'info') => {
     setNotification({ msg, type });
-    setTimeout(() => setNotification(null), 4000); // Un poco más de tiempo para leer
+    setTimeout(() => setNotification(null), 4000); 
   };
 
   // --- RENDER ---
@@ -213,7 +219,8 @@ export default function OnlineStoreApp() {
           </div>
         )}
 
-        {view === 'store' && <StoreFront products={products} addToCart={addToCart} />}
+        {view === 'store' && <StoreFront products={products} addToCart={addToCart} onProductClick={handleProductClick} />}
+        {view === 'product-details' && <ProductDetails product={selectedProduct} addToCart={addToCart} onBack={() => setView('store')} />}
         {view === 'cart' && <CartView cart={cart} total={cartTotal} updateQty={updateQty} removeFromCart={removeFromCart} onCheckout={() => setView('checkout')} onBack={() => setView('store')} />}
         {view === 'checkout' && <CheckoutView cart={cart} total={cartTotal} clearCart={clearCart} setView={setView} user={user} showNotification={showNotification} />}
         {view === 'admin-login' && <AdminLogin onLogin={(p) => { if(p==='admin123'){setIsAdmin(true);localStorage.setItem('isAdminAuthenticated','true');setView('admin-dashboard');showNotification("Bienvenido","success")}else{showNotification("Error","error")} }} onCancel={() => setView('store')} />}
@@ -224,7 +231,7 @@ export default function OnlineStoreApp() {
 }
 
 // --- TIENDA ---
-function StoreFront({ products, addToCart }) {
+function StoreFront({ products, addToCart, onProductClick }) {
   const [searchTerm, setSearchTerm] = useState("");
   const filteredProducts = products.filter(p => p.name.toLowerCase().includes(searchTerm.toLowerCase()));
 
@@ -252,12 +259,12 @@ function StoreFront({ products, addToCart }) {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
           {filteredProducts.map(product => (
             <div key={product.id} className="bg-white rounded-xl shadow-sm hover:shadow-lg transition-all duration-300 flex flex-col overflow-hidden border border-gray-100 group">
-              <div className="h-48 w-full bg-gray-100 relative overflow-hidden">
+              <div className="h-48 w-full bg-gray-100 relative overflow-hidden cursor-pointer" onClick={() => onProductClick(product)}>
                 <img src={product.imageUrl} alt={product.name} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" onError={(e) => {e.target.src = 'https://placehold.co/400x300?text=Digital'}} />
                 {product.stock <= 0 && <div className="absolute inset-0 bg-white/90 flex items-center justify-center"><span className="bg-red-600 text-white text-xs font-bold px-3 py-1 rounded-full">AGOTADO</span></div>}
               </div>
               <div className="p-4 flex-1 flex flex-col">
-                <h3 className="font-bold text-gray-900 mb-1">{product.name}</h3>
+                <h3 className="font-bold text-gray-900 mb-1 cursor-pointer hover:text-indigo-600" onClick={() => onProductClick(product)}>{product.name}</h3>
                 <p className="text-gray-500 text-xs mb-3 flex-1">{product.description?.substring(0, 60)}...</p>
                 <div className="flex justify-between items-center pt-2 border-t border-gray-50">
                   <span className="text-lg font-bold text-indigo-600">Q{parseFloat(product.price).toFixed(2)}</span>
@@ -270,6 +277,79 @@ function StoreFront({ products, addToCart }) {
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+// --- DETALLE DEL PRODUCTO ---
+function ProductDetails({ product, addToCart, onBack }) {
+  if (!product) return null;
+
+  return (
+    <div className="max-w-5xl mx-auto">
+      <button onClick={onBack} className="mb-6 flex items-center text-gray-500 hover:text-indigo-600 text-sm font-medium">
+        <ArrowLeft className="h-4 w-4 mr-2" /> Regresar al catálogo
+      </button>
+
+      <div className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden flex flex-col md:flex-row">
+        {/* Imagen */}
+        <div className="md:w-1/2 bg-gray-100 relative min-h-[300px] md:min-h-[500px]">
+          <img 
+            src={product.imageUrl} 
+            alt={product.name} 
+            className="absolute inset-0 w-full h-full object-cover"
+            onError={(e) => {e.target.src = 'https://placehold.co/600x600?text=Digital'}}
+          />
+          {product.stock <= 0 && (
+            <div className="absolute inset-0 bg-white/80 flex items-center justify-center">
+              <span className="bg-red-600 text-white text-lg font-bold px-6 py-2 rounded-full transform -rotate-12 shadow-xl">AGOTADO</span>
+            </div>
+          )}
+        </div>
+
+        {/* Información */}
+        <div className="p-8 md:p-12 md:w-1/2 flex flex-col">
+          <div className="flex justify-between items-start mb-4">
+             <div>
+                <span className="inline-block px-3 py-1 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700 mb-3 uppercase tracking-wider">
+                  {product.category || 'Digital'}
+                </span>
+                <h1 className="text-3xl font-extrabold text-gray-900 leading-tight mb-2">{product.name}</h1>
+             </div>
+             <div className="text-right">
+                <span className="block text-2xl font-bold text-indigo-600">Q{parseFloat(product.price).toFixed(2)}</span>
+             </div>
+          </div>
+
+          <div className="prose prose-indigo text-gray-600 mb-8 flex-1 overflow-y-auto max-h-[300px] pr-2">
+            <p className="whitespace-pre-line leading-relaxed">{product.description}</p>
+          </div>
+
+          <div className="pt-6 border-t border-gray-100 mt-auto">
+            <div className="flex items-center justify-between mb-6">
+                <span className={`text-sm font-medium flex items-center ${product.stock > 0 ? 'text-green-600' : 'text-red-500'}`}>
+                    {product.stock > 0 ? (
+                        <><CheckCircle className="w-4 h-4 mr-1.5" /> Disponible: {product.stock}</>
+                    ) : (
+                        <><AlertCircle className="w-4 h-4 mr-1.5" /> Sin Stock</>
+                    )}
+                </span>
+            </div>
+            
+            <button 
+                onClick={() => addToCart(product)} 
+                disabled={product.stock <= 0}
+                className={`w-full py-4 px-6 rounded-xl font-bold text-lg shadow-lg transform transition-all active:scale-95 ${
+                    product.stock > 0 
+                    ? 'bg-indigo-600 text-white hover:bg-indigo-700 hover:shadow-indigo-200' 
+                    : 'bg-gray-100 text-gray-400 cursor-not-allowed shadow-none'
+                }`}
+            >
+                {product.stock > 0 ? 'Agregar al Carrito' : 'No disponible'}
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -429,13 +509,50 @@ function CheckoutView({ cart, total, clearCart, setView, user, showNotification 
 // --- ADMIN ---
 function AdminDashboard({ products, orders, showNotification }) {
   const [tab, setTab] = useState('inventory');
+  
+  // Cálculos de estadísticas
+  const totalStock = products.reduce((acc, p) => acc + (p.stock || 0), 0);
+  const totalRevenue = orders.reduce((acc, o) => acc + (o.total || 0), 0);
+  const pendingOrdersCount = orders.filter(o => o.status === 'pending').length;
+
   return (
     <div className="space-y-6">
+      {/* Tarjetas de Estadísticas */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 flex items-center">
+            <div className="p-3 bg-blue-100 text-blue-600 rounded-lg mr-4">
+                <Package className="h-6 w-6" />
+            </div>
+            <div>
+                <p className="text-sm font-medium text-gray-500">Stock Total</p>
+                <p className="text-2xl font-bold text-gray-900">{totalStock} <span className="text-sm font-normal text-gray-400">unidades</span></p>
+            </div>
+        </div>
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 flex items-center">
+            <div className="p-3 bg-green-100 text-green-600 rounded-lg mr-4">
+                <TrendingUp className="h-6 w-6" />
+            </div>
+            <div>
+                <p className="text-sm font-medium text-gray-500">Ventas Totales</p>
+                <p className="text-2xl font-bold text-gray-900">Q{totalRevenue.toFixed(2)}</p>
+            </div>
+        </div>
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 flex items-center">
+            <div className={`p-3 rounded-lg mr-4 ${pendingOrdersCount > 0 ? 'bg-orange-100 text-orange-600' : 'bg-gray-100 text-gray-400'}`}>
+                <AlertCircle className="h-6 w-6" />
+            </div>
+            <div>
+                <p className="text-sm font-medium text-gray-500">Pedidos Pendientes</p>
+                <p className={`text-2xl font-bold ${pendingOrdersCount > 0 ? 'text-orange-600' : 'text-gray-900'}`}>{pendingOrdersCount}</p>
+            </div>
+        </div>
+      </div>
+
       <div className="flex justify-between items-center">
-        <h1 className="text-2xl font-bold text-gray-800">Panel de Control</h1>
+        <h1 className="text-2xl font-bold text-gray-800">Gestión</h1>
         <div className="flex bg-white p-1 rounded-lg border">
           <button onClick={() => setTab('inventory')} className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${tab === 'inventory' ? 'bg-indigo-100 text-indigo-700' : 'text-gray-600 hover:bg-gray-50'}`}>Inventario</button>
-          <button onClick={() => setTab('orders')} className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${tab === 'orders' ? 'bg-indigo-100 text-indigo-700' : 'text-gray-600 hover:bg-gray-50'}`}>Pedidos ({orders.filter(o => o.status === 'pending').length})</button>
+          <button onClick={() => setTab('orders')} className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${tab === 'orders' ? 'bg-indigo-100 text-indigo-700' : 'text-gray-600 hover:bg-gray-50'}`}>Pedidos</button>
         </div>
       </div>
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden min-h-[500px]">
