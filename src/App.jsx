@@ -20,12 +20,19 @@ import {
 // ==========================================
 // Reemplaza los valores vacíos con los de tu consola de Firebase
 const firebaseConfig = {
-  apiKey: "",             
-  authDomain: "",         
-  projectId: "",          
-  storageBucket: "",      
-  messagingSenderId: "",  
-  appId: ""               
+
+  apiKey: "AIzaSyBpRGVRQZztDseOlTlmFSEGY2ur84_uEnI",
+
+  authDomain: "pixelstore-dfba1.firebaseapp.com",
+
+  projectId: "pixelstore-dfba1",
+
+  storageBucket: "pixelstore-dfba1.firebasestorage.app",
+
+  messagingSenderId: "826051147714",
+
+  appId: "1:826051147714:web:2378fb1ee7cda036d4c85b"
+
 };
 
 // Nombre de la colección principal
