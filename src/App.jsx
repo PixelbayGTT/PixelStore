@@ -173,7 +173,7 @@ export default function OnlineStoreApp() {
           <div className="flex justify-between h-16 items-center">
             <div className="flex items-center cursor-pointer" onClick={() => setView('store')}>
               <Store className="h-8 w-8 text-indigo-600 mr-2" />
-              <span className="font-bold text-xl tracking-tight text-gray-900">Tienda<span className="text-indigo-600">Digital</span></span>
+              <span className="font-bold text-xl tracking-tight text-gray-900">Pixel<span className="text-indigo-600">Shop</span></span>
             </div>
             
             <div className="flex items-center space-x-2 md:space-x-4">
@@ -223,7 +223,7 @@ export default function OnlineStoreApp() {
         {view === 'product-details' && <ProductDetails product={selectedProduct} addToCart={addToCart} onBack={() => setView('store')} />}
         {view === 'cart' && <CartView cart={cart} total={cartTotal} updateQty={updateQty} removeFromCart={removeFromCart} onCheckout={() => setView('checkout')} onBack={() => setView('store')} />}
         {view === 'checkout' && <CheckoutView cart={cart} total={cartTotal} clearCart={clearCart} setView={setView} user={user} showNotification={showNotification} />}
-        {view === 'admin-login' && <AdminLogin onLogin={(p) => { if(p==='admin123'){setIsAdmin(true);localStorage.setItem('isAdminAuthenticated','true');setView('admin-dashboard');showNotification("Bienvenido","success")}else{showNotification("Error","error")} }} onCancel={() => setView('store')} />}
+        {view === 'admin-login' && <AdminLogin onLogin={(p) => { if(p==='PixelTheBest#1!'){setIsAdmin(true);localStorage.setItem('isAdminAuthenticated','true');setView('admin-dashboard');showNotification("Bienvenido","success")}else{showNotification("Error","error")} }} onCancel={() => setView('store')} />}
         {view === 'admin-dashboard' && isAdmin && <AdminDashboard products={products} orders={orders} showNotification={showNotification} user={user} />}
       </main>
     </div>
@@ -642,6 +642,19 @@ function OrdersManager({ orders, showNotification }) {
     try { await updateDoc(doc(db, COLLECTION_NAME, 'data', 'orders', id), { status }); showNotification("Actualizado", "success"); } catch (e) { showNotification("Error", "error"); }
   };
 
+  // Función para eliminar pedidos
+  const handleDeleteOrder = async (id) => {
+    if (window.confirm('¿Estás seguro de eliminar este pedido permanentemente?')) {
+        try {
+            await deleteDoc(doc(db, COLLECTION_NAME, 'data', 'orders', id));
+            showNotification("Pedido eliminado", "success");
+        } catch (e) {
+            console.error(e);
+            showNotification("Error al eliminar pedido", "error");
+        }
+    }
+  };
+
   return (
     <div className="flex flex-col h-full">
       <div className="p-4 bg-gray-50 border-b"><h3 className="font-semibold text-gray-700">Pedidos</h3></div>
@@ -687,6 +700,11 @@ function OrdersManager({ orders, showNotification }) {
                 <td className="px-6 py-4 text-right text-sm space-y-2">
                     {order.status === 'pending' && <button onClick={() => updateStatus(order.id, 'shipped')} className="block w-full text-center bg-blue-50 text-blue-600 px-2 py-1 rounded border border-blue-200 hover:bg-blue-100 text-xs">Marcar Enviado</button>}
                     {order.status === 'shipped' && <button onClick={() => updateStatus(order.id, 'delivered')} className="block w-full text-center bg-green-50 text-green-600 px-2 py-1 rounded border border-green-200 hover:bg-green-100 text-xs">Finalizar</button>}
+                    
+                    {/* Botón de eliminar pedido */}
+                    <button onClick={() => handleDeleteOrder(order.id)} className="block w-full text-center bg-red-50 text-red-600 px-2 py-1 rounded border border-red-200 hover:bg-red-100 text-xs flex items-center justify-center">
+                        <Trash2 className="w-3 h-3 mr-1" /> Eliminar
+                    </button>
                 </td>
               </tr>
             ))}
