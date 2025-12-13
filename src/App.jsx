@@ -20,20 +20,15 @@ import {
 // ==========================================
 // Reemplaza los valores vacíos con los de tu consola de Firebase
 const firebaseConfig = {
-
-  apiKey: "AIzaSyBpRGVRQZztDseOlTlmFSEGY2ur84_uEnI",
-
-  authDomain: "pixelstore-dfba1.firebaseapp.com",
-
-  projectId: "pixelstore-dfba1",
-
-  storageBucket: "pixelstore-dfba1.firebasestorage.app",
-
-  messagingSenderId: "826051147714",
-
-  appId: "1:826051147714:web:2378fb1ee7cda036d4c85b"
-
+  apiKey: "",             
+  authDomain: "",         
+  projectId: "",          
+  storageBucket: "",      
+  messagingSenderId: "",  
+  appId: ""               
 };
+
+const app = initializeApp(firebaseConfig);
 
 // Nombre de la colección principal
 const COLLECTION_NAME = "tienda_guatemala_v1";
@@ -81,7 +76,11 @@ export default function OnlineStoreApp() {
 
   // --- AUTENTICACIÓN Y CARGA DE DATOS ---
   useEffect(() => {
-    signInAnonymously(auth).catch((error) => console.error("Error auth:", error));
+    // Intentar login anónimo y reportar error si falla
+    signInAnonymously(auth).catch((error) => {
+        console.error("Error crítico de autenticación:", error);
+        // No bloqueamos la UI aquí, pero el usuario podría no poder guardar datos
+    });
     
     const unsubscribeAuth = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
@@ -93,7 +92,8 @@ export default function OnlineStoreApp() {
   }, []);
 
   useEffect(() => {
-    if (!user) return;
+    // Si no hay usuario o BD, no intentamos conectar listeners aún
+    if (!user || !db) return;
 
     const productsRef = collection(db, COLLECTION_NAME, 'data', 'products');
     const ordersRef = collection(db, COLLECTION_NAME, 'data', 'orders');
@@ -102,13 +102,16 @@ export default function OnlineStoreApp() {
       const prods = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setProducts(prods);
       setLoading(false);
-    }, (error) => console.error("Error productos:", error));
+    }, (error) => {
+        console.error("Error leyendo productos:", error);
+        setLoading(false); // Dejamos de cargar aunque haya error para no bloquear
+    });
 
     const unsubOrders = onSnapshot(ordersRef, (snapshot) => {
       const ords = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       ords.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
       setOrders(ords);
-    }, (error) => console.error("Error órdenes:", error));
+    }, (error) => console.error("Error leyendo órdenes:", error));
 
     return () => {
       unsubProducts();
@@ -468,35 +471,61 @@ function InventoryManager({ products, showNotification }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setIsSaving(true); // Bloquear botón para evitar doble click
+    
+    if (!db) {
+        showNotification("Error crítico: No hay conexión a la base de datos", "error");
+        return;
+    }
 
-    // Validación segura de números
-    const safePrice = formData.price ? parseFloat(formData.price) : 0;
-    const safeStock = formData.stock ? parseInt(formData.stock) : 0;
+    setIsSaving(true); 
+
+    // 1. Validación segura de números
+    const safePrice = formData.price && !isNaN(parseFloat(formData.price)) ? parseFloat(formData.price) : 0;
+    const safeStock = formData.stock && !isNaN(parseInt(formData.stock)) ? parseInt(formData.stock) : 0;
 
     const dataToSave = {
-        name: formData.name,
-        category: formData.category,
+        name: formData.name || "Sin Nombre",
+        category: formData.category || "General",
         price: safePrice,
         stock: safeStock,
-        description: formData.description,
-        imageUrl: formData.imageUrl,
+        description: formData.description || "",
+        imageUrl: formData.imageUrl || "",
         updatedAt: serverTimestamp()
     };
 
     try {
         const collectionRef = collection(db, COLLECTION_NAME, 'data', 'products');
-        if (currentProduct) {
-            await updateDoc(doc(db, COLLECTION_NAME, 'data', 'products', currentProduct.id), dataToSave);
-            showNotification("Producto actualizado correctamente", "success");
-        } else {
-            await addDoc(collectionRef, { ...dataToSave, createdAt: serverTimestamp() });
-            showNotification("Producto creado exitosamente", "success");
-        }
+        
+        // 2. Definir la promesa de guardado
+        const savePromise = currentProduct
+            ? updateDoc(doc(db, COLLECTION_NAME, 'data', 'products', currentProduct.id), dataToSave)
+            : addDoc(collectionRef, { ...dataToSave, createdAt: serverTimestamp() });
+            
+        // 3. Crear promesa de timeout (10 segundos)
+        const timeoutPromise = new Promise((_, reject) => 
+            setTimeout(() => reject(new Error("Timeout: El servidor tardó demasiado en responder")), 10000)
+        );
+
+        // 4. Competencia: Lo que ocurra primero (éxito o timeout)
+        await Promise.race([savePromise, timeoutPromise]);
+        
+        showNotification(currentProduct ? "Producto actualizado correctamente" : "Producto creado exitosamente", "success");
         setIsEditing(false);
     } catch (e) {
-        console.error("Error guardando:", e);
-        showNotification("Hubo un error al guardar. Revisa la consola.", "error");
+        console.error("Error detallado al guardar:", e);
+        
+        let msg = "Error desconocido al guardar.";
+        
+        // Diagnóstico de errores comunes
+        if (e.message.includes("Timeout")) {
+            msg = "El servidor no responde. Verifica tu conexión a internet.";
+        } else if (e.code === 'permission-denied') {
+            msg = "Permiso denegado. Verifica las reglas de Firestore en la consola.";
+        } else if (e.code === 'unavailable') {
+            msg = "Servicio no disponible. Estás offline o Firebase está caído.";
+        }
+        
+        showNotification(msg, "error");
     } finally {
         setIsSaving(false);
     }
