@@ -28,8 +28,6 @@ const firebaseConfig = {
   appId: ""               
 };
 
-const app = initializeApp(firebaseConfig);
-
 // Nombre de la colección principal
 const COLLECTION_NAME = "tienda_guatemala_v1";
 
