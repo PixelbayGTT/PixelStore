@@ -239,7 +239,7 @@ function StoreFront({ products, addToCart, onProductClick }) {
     <div className="space-y-6">
       <div className="bg-gradient-to-r from-gray-900 to-indigo-900 rounded-2xl p-8 text-center text-white shadow-lg">
         <h1 className="text-3xl font-bold mb-2">Productos Digitales Premium</h1>
-        <p className="text-indigo-200">Entrega inmediata y segura.</p>
+        <p className="text-indigo-200">Entrega rapida y segura</p>
       </div>
 
       <div className="flex justify-between items-center bg-white p-4 rounded-xl shadow-sm">
