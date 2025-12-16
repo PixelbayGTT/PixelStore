@@ -381,7 +381,7 @@ function CheckoutView({ cart, total, clearCart, setView, user, showNotification,
         // Construir detalle de productos
         const itemsDetail = orderData.items.map(i => `• ${i.qty}x ${i.name}`).join('\n');
         
-        const text = `🔔 *NUEVo PEDIDO: #${orderData.orderNumber}*\n\n👤 *Cliente:* ${orderData.customer.name}\n📞 *Tel:* ${orderData.customer.phone}\n💰 *Total:* Q${orderData.total.toFixed(2)}\n\n🛒 *Productos:*\n${itemsDetail}`;
+        const text = `🔔 *NUEVO PEDIDO: #${orderData.orderNumber}*\n\n👤 *Cliente:* ${orderData.customer.name}\n📞 *Tel:* ${orderData.customer.phone}\n💰 *Total:* Q${orderData.total.toFixed(2)}\n\n🛒 *Productos:*\n${itemsDetail}`;
         
         const url = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage?chat_id=${TELEGRAM_USER_ID}&text=${encodeURIComponent(text)}&parse_mode=Markdown`;
         
