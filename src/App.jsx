@@ -212,7 +212,7 @@ export default function OnlineStoreApp() {
           <div className="flex justify-between h-16 items-center">
             <div className="flex items-center cursor-pointer" onClick={() => setView('store')}>
               <Store className="h-8 w-8 text-indigo-600 mr-2" />
-              <span className="font-bold text-xl tracking-tight text-gray-900">Tienda<span className="text-indigo-600">Digital</span></span>
+              <span className="font-bold text-xl tracking-tight text-gray-900">Pixel<span className="text-indigo-600">Shop</span></span>
             </div>
             <div className="flex items-center space-x-3 md:space-x-4">
               {!isAdmin && view !== 'order-success' && (
@@ -274,7 +274,7 @@ function StoreFront({ products, addToCart, onProductClick }) {
     <div className="space-y-6">
       <div className="bg-gradient-to-r from-gray-900 to-indigo-900 rounded-2xl p-8 text-center text-white shadow-lg">
         <h1 className="text-3xl font-bold mb-2">Productos Digitales Premium</h1>
-        <p className="text-indigo-200">Entrega inmediata y segura.</p>
+        <p className="text-indigo-200">Entrega rapida y segura.</p>
       </div>
       <div className="flex justify-between items-center bg-white p-4 rounded-xl shadow-sm">
         <h2 className="text-xl font-bold text-gray-800">Catálogo</h2>
