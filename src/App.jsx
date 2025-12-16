@@ -38,11 +38,7 @@ const firebaseConfig = {
 // 📞 DATOS DE CONTACTO (Para que el cliente te escriba)
 const OWNER_PHONE_NUMBER = "50246903693"; // Tu WhatsApp
 
-// 🤖 NOTIFICACIONES AL ADMIN (Vía Telegram - Más rápido y seguro)
-// Instrucciones:
-// 1. Busca @BotFather en Telegram -> /newbot -> Obtén el TOKEN
-// 2. Busca @userinfobot en Telegram -> Obtén tu ID numérico
-// 3. ¡IMPORTANTE! Busca tu bot en Telegram y dale "INICIAR" (Start) para permitir mensajes.
+// 🤖 NOTIFICACIONES AL ADMIN (Vía Telegram)
 const TELEGRAM_BOT_TOKEN = "8309726545:AAGvQWzrP4xktkyx-TRbjFLy_iVbTFcT3sk"; // Ej: "123456789:AAF..."
 const TELEGRAM_USER_ID = "7350789648";   // Ej: "12345678"
 
@@ -85,6 +81,11 @@ const playSound = () => {
   } catch (e) { console.error("Audio error", e); }
 };
 
+// Generador de ID de orden de 8 dígitos
+const generateOrderId = () => {
+  return Math.floor(10000000 + Math.random() * 90000000).toString();
+};
+
 // --- COMPONENTE PRINCIPAL ---
 export default function OnlineStoreApp() {
   if (!isConfigured) {
@@ -110,6 +111,11 @@ export default function OnlineStoreApp() {
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [lastOrder, setLastOrder] = useState(null);
   const isFirstLoad = useRef(true);
+
+  // Calcular órdenes pendientes para el badge
+  const pendingOrdersCount = useMemo(() => 
+    orders.filter(o => o.status === 'pending').length
+  , [orders]);
 
   // --- AUTENTICACIÓN Y CARGA DE DATOS ---
   useEffect(() => {
@@ -141,10 +147,10 @@ export default function OnlineStoreApp() {
             const amIAdmin = localStorage.getItem('isAdminAuthenticated') === 'true';
             if (amIAdmin) {
                playSound();
-               showNotification(`¡Nueva orden de ${newOrder.customer?.name || 'Cliente'}!`, 'success');
+               showNotification(`¡Nueva orden #${newOrder.orderNumber}!`, 'success');
                if (Notification.permission === "granted") {
                  new Notification("¡Nueva Orden Recibida! 💰", {
-                   body: `Cliente: ${newOrder.customer?.name}\nTotal: Q${newOrder.total?.toFixed(2)}`,
+                   body: `Pedido #${newOrder.orderNumber} - Q${newOrder.total?.toFixed(2)}`,
                    icon: '/vite.svg'
                  });
                }
@@ -208,7 +214,7 @@ export default function OnlineStoreApp() {
               <Store className="h-8 w-8 text-indigo-600 mr-2" />
               <span className="font-bold text-xl tracking-tight text-gray-900">Tienda<span className="text-indigo-600">Digital</span></span>
             </div>
-            <div className="flex items-center space-x-2 md:space-x-4">
+            <div className="flex items-center space-x-3 md:space-x-4">
               {!isAdmin && view !== 'order-success' && (
                 <button onClick={() => setView('cart')} className="relative p-2 text-gray-500 hover:text-indigo-600 transition-colors">
                   <ShoppingCart className="h-6 w-6" />
@@ -217,6 +223,16 @@ export default function OnlineStoreApp() {
               )}
               {isAdmin ? (
                 <>
+                  {/* Icono de notificaciones para Admin */}
+                  <div className="relative p-2 mr-2 text-gray-600 cursor-pointer hover:text-indigo-600" onClick={() => setView('admin-dashboard')}>
+                    <Bell className="h-6 w-6" />
+                    {pendingOrdersCount > 0 && (
+                        <span className="absolute top-0 right-0 inline-flex items-center justify-center px-2 py-1 text-xs font-bold leading-none text-white transform translate-x-1/4 -translate-y-1/4 bg-red-600 rounded-full">
+                            {pendingOrdersCount}
+                        </span>
+                    )}
+                  </div>
+
                   {view !== 'admin-dashboard' && <button onClick={() => setView('admin-dashboard')} className="flex items-center px-3 py-2 text-sm font-medium text-indigo-600 bg-indigo-50 rounded-md hover:bg-indigo-100"><LayoutDashboard className="h-4 w-4 mr-1" /> Panel</button>}
                   <button onClick={() => { setIsAdmin(false); localStorage.removeItem('isAdminAuthenticated'); setView('store'); }} className="flex items-center px-3 py-2 text-sm font-medium text-red-600 bg-red-50 rounded-md hover:bg-red-100"><LogOut className="h-4 w-4" /></button>
                 </>
@@ -360,23 +376,18 @@ function CheckoutView({ cart, total, clearCart, setView, user, showNotification,
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Función para notificar al dueño (Telegram)
-  const notifyOwner = async (orderData, id) => {
+  const notifyOwner = async (orderData) => {
     if (TELEGRAM_BOT_TOKEN && TELEGRAM_USER_ID) {
-        // Mensaje limpio y estructurado para Telegram
-        const text = `🔔 *NUEVA VENTA DIGITAL*\n\n👤 *Cliente:* ${orderData.customer.name}\n💰 *Total:* Q${orderData.total.toFixed(2)}\n📝 *ID:* ${id.slice(0,6)}\n📞 *Tel:* ${orderData.customer.phone}`;
+        // Construir detalle de productos
+        const itemsDetail = orderData.items.map(i => `• ${i.qty}x ${i.name}`).join('\n');
         
-        // Uso de encodeURIComponent para asegurar que el mensaje llegue completo y sin errores de URL
+        const text = `🔔 *NUEVo PEDIDO: #${orderData.orderNumber}*\n\n👤 *Cliente:* ${orderData.customer.name}\n📞 *Tel:* ${orderData.customer.phone}\n💰 *Total:* Q${orderData.total.toFixed(2)}\n\n🛒 *Productos:*\n${itemsDetail}`;
+        
         const url = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage?chat_id=${TELEGRAM_USER_ID}&text=${encodeURIComponent(text)}&parse_mode=Markdown`;
         
         try {
             const response = await fetch(url);
-            if (!response.ok) {
-                const errorData = await response.json();
-                console.error("Error Telegram API:", errorData);
-                // Si la respuesta no es OK, es probable que el bot no esté iniciado o los IDs estén mal
-            } else {
-                console.log("Notificación enviada a Telegram");
-            }
+            if (!response.ok) console.error("Error Telegram API");
         } catch (e) {
             console.error("Error Telegram Network", e);
         }
@@ -386,11 +397,14 @@ function CheckoutView({ cart, total, clearCart, setView, user, showNotification,
   const handleSubmit = async (e) => {
     e.preventDefault();
     setIsSubmitting(true);
+    const orderNumber = generateOrderId(); // Generar ID 8 dígitos
+
     try {
       const batch = writeBatch(db);
       const newOrderRef = doc(collection(db, COLLECTION_NAME, 'data', 'orders'));
       const orderData = {
-        id: newOrderRef.id,
+        id: newOrderRef.id, // ID interno de firebase
+        orderNumber: orderNumber, // ID visible de 8 dígitos
         items: cart,
         total,
         customer: formData,
@@ -407,11 +421,11 @@ function CheckoutView({ cart, total, clearCart, setView, user, showNotification,
 
       await batch.commit();
       
-      // Enviar alerta a Telegram
-      notifyOwner(orderData, newOrderRef.id);
+      // Enviar alerta a Telegram con el nuevo ID y detalles
+      notifyOwner(orderData);
 
       clearCart();
-      setLastOrder({ ...orderData, id: newOrderRef.id, createdAt: new Date() });
+      setLastOrder({ ...orderData, createdAt: new Date() });
       setView('order-success');
     } catch (error) {
       console.error(error);
@@ -443,7 +457,7 @@ function OrderSuccessView({ order, onBack }) {
 
   const handleWhatsApp = () => {
     const itemsList = order.items.map(i => `${i.qty}x ${i.name}`).join('%0A');
-    const message = `Hola, he realizado el pedido *#${order.id.slice(0,6)}* en la tienda.%0A%0A*Detalle:*%0A${itemsList}%0A%0A*Total: Q${order.total.toFixed(2)}*%0A%0ASoy *${order.customer.name}*. Solicito datos para depositar.`;
+    const message = `Hola, he realizado el pedido *#${order.orderNumber}* en la tienda.%0A%0A*Detalle:*%0A${itemsList}%0A%0A*Total: Q${order.total.toFixed(2)}*%0A%0ASoy *${order.customer.name}*. Solicito datos para depositar.`;
     window.open(`https://wa.me/${OWNER_PHONE_NUMBER}?text=${message}`, '_blank');
   };
 
@@ -453,7 +467,7 @@ function OrderSuccessView({ order, onBack }) {
         <CheckCircle className="w-10 h-10 text-green-600" />
       </div>
       <h2 className="text-3xl font-bold text-gray-900 mb-2">¡Pedido Registrado!</h2>
-      <p className="text-gray-500 mb-8">Tu orden #{order.id.slice(0,6)} está pendiente de pago.</p>
+      <p className="text-gray-500 mb-8">Tu orden <span className="font-mono font-bold text-indigo-600">#{order.orderNumber}</span> está pendiente de pago.</p>
       
       <div className="bg-gray-50 rounded-xl p-6 mb-8 text-left border border-gray-100">
         <h3 className="font-bold text-gray-800 mb-4 border-b pb-2">Resumen</h3>
@@ -658,7 +672,12 @@ function OrdersManager({ orders, showNotification }) {
           <tbody className="bg-white divide-y divide-gray-100">
             {orders.map(order => (
               <tr key={order.id} className="hover:bg-gray-50 align-top">
-                <td className="px-6 py-4 text-sm"><div className="font-bold text-gray-900">{order.customer?.name}</div><div className="text-xs text-gray-500">{order.customer?.phone}</div><div className="text-xs text-gray-400 mt-1 font-mono">{new Date(order.createdAt?.seconds * 1000).toLocaleDateString()}</div></td>
+                <td className="px-6 py-4 text-sm">
+                    <div className="font-bold text-gray-900">{order.customer?.name}</div>
+                    <div className="text-xs text-indigo-600 font-mono mb-1">#{order.orderNumber || order.id.slice(0,6)}</div>
+                    <div className="text-xs text-gray-500">{order.customer?.phone}</div>
+                    <div className="text-xs text-gray-400">{new Date(order.createdAt?.seconds * 1000).toLocaleDateString()}</div>
+                </td>
                 <td className="px-6 py-4"><div className="space-y-1">{order.items?.map((item, index) => (<div key={index} className="text-sm text-gray-700 flex items-start"><span className="font-bold mr-2 text-indigo-600 bg-indigo-50 px-1.5 rounded">{item.qty}x</span><span>{item.name}</span></div>))}</div></td>
                 <td className="px-6 py-4 text-sm font-bold text-indigo-600">Q{order.total?.toFixed(2)}</td>
                 <td className="px-6 py-4 text-sm"><span className={`px-2 py-1 text-xs font-semibold rounded-full ${order.status === 'pending' ? 'bg-yellow-100 text-yellow-800' : order.status === 'shipped' ? 'bg-blue-100 text-blue-800' : 'bg-green-100 text-green-800'}`}>{order.status === 'pending' ? 'Pendiente' : order.status === 'shipped' ? 'Enviado' : 'Completado'}</span></td>
