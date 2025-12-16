@@ -42,6 +42,7 @@ const OWNER_PHONE_NUMBER = "50246903693"; // Tu WhatsApp
 // Instrucciones:
 // 1. Busca @BotFather en Telegram -> /newbot -> Obtén el TOKEN
 // 2. Busca @userinfobot en Telegram -> Obtén tu ID numérico
+// 3. ¡IMPORTANTE! Busca tu bot en Telegram y dale "INICIAR" (Start) para permitir mensajes.
 const TELEGRAM_BOT_TOKEN = "8309726545:AAGvQWzrP4xktkyx-TRbjFLy_iVbTFcT3sk"; // Ej: "123456789:AAF..."
 const TELEGRAM_USER_ID = "7350789648";   // Ej: "12345678"
 
@@ -362,14 +363,22 @@ function CheckoutView({ cart, total, clearCart, setView, user, showNotification,
   const notifyOwner = async (orderData, id) => {
     if (TELEGRAM_BOT_TOKEN && TELEGRAM_USER_ID) {
         // Mensaje limpio y estructurado para Telegram
-        const text = `🔔 *NUEVA VENTA DIGITAL*%0A%0A👤 *Cliente:* ${orderData.customer.name}%0A💰 *Total:* Q${orderData.total.toFixed(2)}%0A📝 *ID:* ${id.slice(0,6)}%0A📞 *Tel:* ${orderData.customer.phone}`;
-        const url = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage?chat_id=${TELEGRAM_USER_ID}&text=${text}&parse_mode=Markdown`;
+        const text = `🔔 *NUEVA VENTA DIGITAL*\n\n👤 *Cliente:* ${orderData.customer.name}\n💰 *Total:* Q${orderData.total.toFixed(2)}\n📝 *ID:* ${id.slice(0,6)}\n📞 *Tel:* ${orderData.customer.phone}`;
+        
+        // Uso de encodeURIComponent para asegurar que el mensaje llegue completo y sin errores de URL
+        const url = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage?chat_id=${TELEGRAM_USER_ID}&text=${encodeURIComponent(text)}&parse_mode=Markdown`;
         
         try {
-            await fetch(url);
-            console.log("Notificación enviada a Telegram");
+            const response = await fetch(url);
+            if (!response.ok) {
+                const errorData = await response.json();
+                console.error("Error Telegram API:", errorData);
+                // Si la respuesta no es OK, es probable que el bot no esté iniciado o los IDs estén mal
+            } else {
+                console.log("Notificación enviada a Telegram");
+            }
         } catch (e) {
-            console.error("Error Telegram", e);
+            console.error("Error Telegram Network", e);
         }
     }
   };
@@ -528,8 +537,20 @@ function AdminDashboard({ products, orders, showNotification }) {
       {(TELEGRAM_BOT_TOKEN && TELEGRAM_USER_ID) && (
         <div className="bg-blue-50 p-4 rounded-lg flex justify-between items-center text-sm text-blue-700 border border-blue-100">
             <div className="flex items-center"><Send className="w-4 h-4 mr-2" /> Telegram Configurado</div>
-            <button onClick={() => {
-                fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage?chat_id=${TELEGRAM_USER_ID}&text=🔔 Prueba de notificación de TiendaDigital`).then(()=>showNotification("Prueba enviada", "success"));
+            <button onClick={async () => {
+                const text = encodeURIComponent("🔔 Prueba de notificación de TiendaDigital. ¡Todo funciona!");
+                try {
+                    const res = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage?chat_id=${TELEGRAM_USER_ID}&text=${text}`);
+                    const data = await res.json();
+                    if (data.ok) {
+                        showNotification("Prueba enviada con éxito", "success");
+                    } else {
+                        console.error(data);
+                        showNotification(`Error: ${data.description}`, "error");
+                    }
+                } catch (e) {
+                    showNotification("Error de red al conectar con Telegram", "error");
+                }
             }} className="underline hover:text-blue-900">Probar notificación</button>
         </div>
       )}
