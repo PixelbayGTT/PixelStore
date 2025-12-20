@@ -36,11 +36,11 @@ const firebaseConfig = {
 };
 
 // 📞 DATOS DE CONTACTO (Para que el cliente te escriba)
-const OWNER_PHONE_NUMBER = "50246903693"; // Tu WhatsApp
+const OWNER_PHONE_NUMBER = "50200000000"; // Tu WhatsApp
 
 // 🤖 NOTIFICACIONES AL ADMIN (Vía Telegram)
-const TELEGRAM_BOT_TOKEN = "8309726545:AAGvQWzrP4xktkyx-TRbjFLy_iVbTFcT3sk"; // Ej: "123456789:AAF..."
-const TELEGRAM_USER_ID = "7350789648";   // Ej: "12345678"
+const TELEGRAM_BOT_TOKEN = ""; // Ej: "123456789:AAF..."
+const TELEGRAM_USER_ID = "";   // Ej: "12345678"
 
 // Nombre de la colección principal
 const COLLECTION_NAME = "tienda_digital_gt_v2";
@@ -116,6 +116,21 @@ export default function OnlineStoreApp() {
   const pendingOrdersCount = useMemo(() => 
     orders.filter(o => o.status === 'pending').length
   , [orders]);
+
+  // --- CONFIGURACIÓN DE FAVICON Y TÍTULO ---
+  useEffect(() => {
+    // Cambiar título
+    document.title = "Tienda Digital GT 🛍️";
+    
+    // Cambiar Favicon a una bolsa de compras (Emoji SVG)
+    let link = document.querySelector("link[rel~='icon']");
+    if (!link) {
+      link = document.createElement('link');
+      link.rel = 'icon';
+      document.getElementsByTagName('head')[0].appendChild(link);
+    }
+    link.href = "data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🛍️</text></svg>";
+  }, []);
 
   // --- AUTENTICACIÓN Y CARGA DE DATOS ---
   useEffect(() => {
@@ -212,7 +227,7 @@ export default function OnlineStoreApp() {
           <div className="flex justify-between h-16 items-center">
             <div className="flex items-center cursor-pointer" onClick={() => setView('store')}>
               <Store className="h-8 w-8 text-indigo-600 mr-2" />
-              <span className="font-bold text-xl tracking-tight text-gray-900">Pixel<span className="text-indigo-600">Shop</span></span>
+              <span className="font-bold text-xl tracking-tight text-gray-900">Tienda<span className="text-indigo-600">Digital</span></span>
             </div>
             <div className="flex items-center space-x-3 md:space-x-4">
               {!isAdmin && view !== 'order-success' && (
@@ -274,7 +289,7 @@ function StoreFront({ products, addToCart, onProductClick }) {
     <div className="space-y-6">
       <div className="bg-gradient-to-r from-gray-900 to-indigo-900 rounded-2xl p-8 text-center text-white shadow-lg">
         <h1 className="text-3xl font-bold mb-2">Productos Digitales Premium</h1>
-        <p className="text-indigo-200">Entrega rapida y segura.</p>
+        <p className="text-indigo-200">Entrega inmediata y segura.</p>
       </div>
       <div className="flex justify-between items-center bg-white p-4 rounded-xl shadow-sm">
         <h2 className="text-xl font-bold text-gray-800">Catálogo</h2>
@@ -381,7 +396,7 @@ function CheckoutView({ cart, total, clearCart, setView, user, showNotification,
         // Construir detalle de productos
         const itemsDetail = orderData.items.map(i => `• ${i.qty}x ${i.name}`).join('\n');
         
-        const text = `🔔 *NUEVO PEDIDO: #${orderData.orderNumber}*\n\n👤 *Cliente:* ${orderData.customer.name}\n📞 *Tel:* ${orderData.customer.phone}\n💰 *Total:* Q${orderData.total.toFixed(2)}\n\n🛒 *Productos:*\n${itemsDetail}`;
+        const text = `🔔 *NUEVA VENTA DIGITAL*\n\n📄 *Pedido:* #${orderData.orderNumber}\n👤 *Cliente:* ${orderData.customer.name}\n📞 *Tel:* ${orderData.customer.phone}\n💰 *Total:* Q${orderData.total.toFixed(2)}\n\n🛒 *Productos:*\n${itemsDetail}`;
         
         const url = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage?chat_id=${TELEGRAM_USER_ID}&text=${encodeURIComponent(text)}&parse_mode=Markdown`;
         
@@ -649,9 +664,31 @@ function OrdersManager({ orders, showNotification }) {
     try { await updateDoc(doc(db, COLLECTION_NAME, 'data', 'orders', id), { status }); showNotification("Actualizado", "success"); } catch (e) { showNotification("Error", "error"); }
   };
 
-  const handleDeleteOrder = async (id) => {
-    if (window.confirm('¿Estás seguro de eliminar este pedido permanentemente?')) {
-        try { await deleteDoc(doc(db, COLLECTION_NAME, 'data', 'orders', id)); showNotification("Pedido eliminado", "success"); } catch (e) { showNotification("Error al eliminar pedido", "error"); }
+  const handleDeleteOrder = async (order) => {
+    if (window.confirm('¿Estás seguro de eliminar este pedido permanentemente? \nEl stock de los productos será restaurado.')) {
+        try {
+            const batch = writeBatch(db);
+            
+            // 1. Eliminar la orden
+            const orderRef = doc(db, COLLECTION_NAME, 'data', 'orders', order.id);
+            batch.delete(orderRef);
+
+            // 2. Restaurar stock de cada producto
+            if (order.items && Array.isArray(order.items)) {
+                order.items.forEach(item => {
+                    const productRef = doc(db, COLLECTION_NAME, 'data', 'products', item.id);
+                    batch.update(productRef, {
+                        stock: increment(item.qty)
+                    });
+                });
+            }
+
+            await batch.commit();
+            showNotification("Pedido eliminado y stock restaurado", "success");
+        } catch (e) {
+            console.error(e);
+            showNotification("Error al eliminar pedido", "error");
+        }
     }
   };
 
@@ -684,7 +721,7 @@ function OrdersManager({ orders, showNotification }) {
                 <td className="px-6 py-4 text-right text-sm space-y-2">
                     {order.status === 'pending' && <button onClick={() => updateStatus(order.id, 'shipped')} className="block w-full text-center bg-blue-50 text-blue-600 px-2 py-1 rounded border border-blue-200 hover:bg-blue-100 text-xs">Marcar Enviado</button>}
                     {order.status === 'shipped' && <button onClick={() => updateStatus(order.id, 'delivered')} className="block w-full text-center bg-green-50 text-green-600 px-2 py-1 rounded border border-green-200 hover:bg-green-100 text-xs">Finalizar</button>}
-                    <button onClick={() => handleDeleteOrder(order.id)} className="block w-full text-center bg-red-50 text-red-600 px-2 py-1 rounded border border-red-200 hover:bg-red-100 text-xs flex items-center justify-center"><Trash2 className="w-3 h-3 mr-1" /> Eliminar</button>
+                    <button onClick={() => handleDeleteOrder(order)} className="block w-full text-center bg-red-50 text-red-600 px-2 py-1 rounded border border-red-200 hover:bg-red-100 text-xs flex items-center justify-center"><Trash2 className="w-3 h-3 mr-1" /> Eliminar</button>
                 </td>
               </tr>
             ))}
