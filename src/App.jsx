@@ -35,12 +35,12 @@ const firebaseConfig = {
 
 };
 
-// 📞 DATOS DE CONTACTO (Para que el cliente te escriba)
-const OWNER_PHONE_NUMBER = "50200000000"; // Tu WhatsApp
+// 📞 DATOS DE CONTACTO
+const OWNER_PHONE_NUMBER = "50200000000"; 
 
-// 🤖 NOTIFICACIONES AL ADMIN (Vía Telegram)
-const TELEGRAM_BOT_TOKEN = ""; // Ej: "123456789:AAF..."
-const TELEGRAM_USER_ID = "";   // Ej: "12345678"
+// 🤖 NOTIFICACIONES AL ADMIN
+const TELEGRAM_BOT_TOKEN = ""; 
+const TELEGRAM_USER_ID = "";   
 
 // Nombre de la colección principal
 const COLLECTION_NAME = "tienda_digital_gt_v2";
@@ -81,7 +81,6 @@ const playSound = () => {
   } catch (e) { console.error("Audio error", e); }
 };
 
-// Generador de ID de orden de 8 dígitos
 const generateOrderId = () => {
   return Math.floor(10000000 + Math.random() * 90000000).toString();
 };
@@ -112,17 +111,38 @@ export default function OnlineStoreApp() {
   const [lastOrder, setLastOrder] = useState(null);
   const isFirstLoad = useRef(true);
 
-  // Calcular órdenes pendientes para el badge
-  const pendingOrdersCount = useMemo(() => 
-    orders.filter(o => o.status === 'pending').length
-  , [orders]);
+  const pendingOrdersCount = useMemo(() => orders.filter(o => o.status === 'pending').length, [orders]);
 
-  // --- CONFIGURACIÓN DE FAVICON Y TÍTULO ---
+  // --- CONFIGURACIÓN DE HISTORIAL (BACK BUTTON FIX) ---
   useEffect(() => {
-    // Cambiar título
-    document.title = "PixelShop 🛍️";
+    // 1. Manejador para cuando el usuario presiona "Atrás" en el navegador
+    const handlePopState = (event) => {
+      const hash = window.location.hash;
+      
+      // Mapear el hash a la vista correspondiente
+      if (hash === '#product-details') {
+        // Si hay historial de producto pero no tenemos producto seleccionado (ej. refresh), volver a store
+        // Nota: selectedProduct se mantiene en memoria si solo navegamos, pero se pierde en refresh
+        setView('product-details');
+      } else if (hash === '#cart') {
+        setView('cart');
+      } else if (hash === '#checkout') {
+        setView('checkout');
+      } else if (hash === '#admin-dashboard') {
+        setView('admin-dashboard');
+      } else if (hash === '#order-success') {
+        setView('order-success');
+      } else {
+        setView('store');
+        setSelectedProduct(null); // Limpiar selección al volver al inicio
+      }
+    };
+
+    // 2. Escuchar el evento
+    window.addEventListener('popstate', handlePopState);
     
-    // Cambiar Favicon a una bolsa de compras (Emoji SVG)
+    // 3. Configuración inicial
+    document.title = "Tienda Digital GT 🛍️";
     let link = document.querySelector("link[rel~='icon']");
     if (!link) {
       link = document.createElement('link');
@@ -130,7 +150,21 @@ export default function OnlineStoreApp() {
       document.getElementsByTagName('head')[0].appendChild(link);
     }
     link.href = "data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🛍️</text></svg>";
+
+    return () => window.removeEventListener('popstate', handlePopState);
   }, []);
+
+  // Función auxiliar para navegar y agregar al historial
+  const navigateTo = (newView, hash) => {
+    setView(newView);
+    window.history.pushState({ view: newView }, '', hash);
+    window.scrollTo(0, 0); // Scroll arriba al cambiar de vista
+  };
+
+  // Función para volver atrás (usando el navegador)
+  const goBack = () => {
+    window.history.back();
+  };
 
   // --- AUTENTICACIÓN Y CARGA DE DATOS ---
   useEffect(() => {
@@ -212,7 +246,12 @@ export default function OnlineStoreApp() {
     }));
   };
 
-  const handleProductClick = (product) => { setSelectedProduct(product); setView('product-details'); };
+  const handleProductClick = (product) => { 
+    setSelectedProduct(product); 
+    // Usamos navigateTo para agregar al historial
+    navigateTo('product-details', '#product-details'); 
+  };
+
   const cartTotal = useMemo(() => cart.reduce((t, i) => t + (i.price * i.qty), 0), [cart]);
   const clearCart = () => setCart([]);
   const showNotification = (msg, type = 'info') => { setNotification({ msg, type }); setTimeout(() => setNotification(null), 5000); };
@@ -225,21 +264,20 @@ export default function OnlineStoreApp() {
       <nav className="sticky top-0 z-50 bg-white shadow-sm border-b border-gray-100">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16 items-center">
-            <div className="flex items-center cursor-pointer" onClick={() => setView('store')}>
+            <div className="flex items-center cursor-pointer" onClick={() => navigateTo('store', ' ')}>
               <Store className="h-8 w-8 text-indigo-600 mr-2" />
-              <span className="font-bold text-xl tracking-tight text-gray-900">Pixel<span className="text-indigo-600">Shop</span></span>
+              <span className="font-bold text-xl tracking-tight text-gray-900">Tienda<span className="text-indigo-600">Digital</span></span>
             </div>
             <div className="flex items-center space-x-3 md:space-x-4">
               {!isAdmin && view !== 'order-success' && (
-                <button onClick={() => setView('cart')} className="relative p-2 text-gray-500 hover:text-indigo-600 transition-colors">
+                <button onClick={() => navigateTo('cart', '#cart')} className="relative p-2 text-gray-500 hover:text-indigo-600 transition-colors">
                   <ShoppingCart className="h-6 w-6" />
                   {cart.length > 0 && <span className="absolute top-0 right-0 inline-flex items-center justify-center px-2 py-1 text-xs font-bold leading-none text-white transform translate-x-1/4 -translate-y-1/4 bg-red-500 rounded-full">{cart.reduce((a, c) => a + c.qty, 0)}</span>}
                 </button>
               )}
               {isAdmin ? (
                 <>
-                  {/* Icono de notificaciones para Admin */}
-                  <div className="relative p-2 mr-2 text-gray-600 cursor-pointer hover:text-indigo-600" onClick={() => setView('admin-dashboard')}>
+                  <div className="relative p-2 mr-2 text-gray-600 cursor-pointer hover:text-indigo-600" onClick={() => navigateTo('admin-dashboard', '#admin-dashboard')}>
                     <Bell className="h-6 w-6" />
                     {pendingOrdersCount > 0 && (
                         <span className="absolute top-0 right-0 inline-flex items-center justify-center px-2 py-1 text-xs font-bold leading-none text-white transform translate-x-1/4 -translate-y-1/4 bg-red-600 rounded-full">
@@ -247,9 +285,8 @@ export default function OnlineStoreApp() {
                         </span>
                     )}
                   </div>
-
-                  {view !== 'admin-dashboard' && <button onClick={() => setView('admin-dashboard')} className="flex items-center px-3 py-2 text-sm font-medium text-indigo-600 bg-indigo-50 rounded-md hover:bg-indigo-100"><LayoutDashboard className="h-4 w-4 mr-1" /> Panel</button>}
-                  <button onClick={() => { setIsAdmin(false); localStorage.removeItem('isAdminAuthenticated'); setView('store'); }} className="flex items-center px-3 py-2 text-sm font-medium text-red-600 bg-red-50 rounded-md hover:bg-red-100"><LogOut className="h-4 w-4" /></button>
+                  {view !== 'admin-dashboard' && <button onClick={() => navigateTo('admin-dashboard', '#admin-dashboard')} className="flex items-center px-3 py-2 text-sm font-medium text-indigo-600 bg-indigo-50 rounded-md hover:bg-indigo-100"><LayoutDashboard className="h-4 w-4 mr-1" /> Panel</button>}
+                  <button onClick={() => { setIsAdmin(false); localStorage.removeItem('isAdminAuthenticated'); navigateTo('store', ' '); }} className="flex items-center px-3 py-2 text-sm font-medium text-red-600 bg-red-50 rounded-md hover:bg-red-100"><LogOut className="h-4 w-4" /></button>
                 </>
               ) : (
                 <button onClick={() => setView('admin-login')} className="text-sm font-medium text-gray-500 hover:text-gray-900 px-2">Admin</button>
@@ -268,11 +305,12 @@ export default function OnlineStoreApp() {
         )}
 
         {view === 'store' && <StoreFront products={products} addToCart={addToCart} onProductClick={handleProductClick} />}
-        {view === 'product-details' && <ProductDetails product={selectedProduct} addToCart={addToCart} onBack={() => setView('store')} />}
-        {view === 'cart' && <CartView cart={cart} total={cartTotal} updateQty={updateQty} removeFromCart={removeFromCart} onCheckout={() => setView('checkout')} onBack={() => setView('store')} />}
-        {view === 'checkout' && <CheckoutView cart={cart} total={cartTotal} clearCart={clearCart} setView={setView} user={user} showNotification={showNotification} setLastOrder={setLastOrder} />}
-        {view === 'order-success' && <OrderSuccessView order={lastOrder} onBack={() => setView('store')} />}
-        {view === 'admin-login' && <AdminLogin onLogin={(p) => { if(p==='admin123'){setIsAdmin(true);localStorage.setItem('isAdminAuthenticated','true');setView('admin-dashboard');showNotification("Bienvenido","success")}else{showNotification("Error","error")} }} onCancel={() => setView('store')} />}
+        {/* Validamos que selectedProduct exista, si no (por refresh), mostramos tienda */}
+        {view === 'product-details' && (selectedProduct ? <ProductDetails product={selectedProduct} addToCart={addToCart} onBack={goBack} /> : <StoreFront products={products} addToCart={addToCart} onProductClick={handleProductClick} />)}
+        {view === 'cart' && <CartView cart={cart} total={cartTotal} updateQty={updateQty} removeFromCart={removeFromCart} onCheckout={() => navigateTo('checkout', '#checkout')} onBack={goBack} />}
+        {view === 'checkout' && <CheckoutView cart={cart} total={cartTotal} clearCart={clearCart} navigateTo={navigateTo} user={user} showNotification={showNotification} setLastOrder={setLastOrder} onBack={goBack} />}
+        {view === 'order-success' && <OrderSuccessView order={lastOrder} onBack={() => navigateTo('store', ' ')} />}
+        {view === 'admin-login' && <AdminLogin onLogin={(p) => { if(p==='admin123'){setIsAdmin(true);localStorage.setItem('isAdminAuthenticated','true');navigateTo('admin-dashboard', '#admin-dashboard');showNotification("Bienvenido","success")}else{showNotification("Error","error")} }} onCancel={() => navigateTo('store', ' ')} />}
         {view === 'admin-dashboard' && isAdmin && <AdminDashboard products={products} orders={orders} showNotification={showNotification} user={user} />}
       </main>
     </div>
@@ -386,18 +424,15 @@ function CartView({ cart, total, updateQty, removeFromCart, onCheckout, onBack }
   );
 }
 
-function CheckoutView({ cart, total, clearCart, setView, user, showNotification, setLastOrder }) {
+function CheckoutView({ cart, total, clearCart, setView, user, showNotification, setLastOrder, navigateTo, onBack }) {
   const [formData, setFormData] = useState({ name: '', email: '', phone: '' });
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Función para notificar al dueño (Telegram)
   const notifyOwner = async (orderData) => {
     if (TELEGRAM_BOT_TOKEN && TELEGRAM_USER_ID) {
-        // Construir detalle de productos
         const itemsDetail = orderData.items.map(i => `• ${i.qty}x ${i.name}`).join('\n');
-        
         const text = `🔔 *NUEVA VENTA DIGITAL*\n\n📄 *Pedido:* #${orderData.orderNumber}\n👤 *Cliente:* ${orderData.customer.name}\n📞 *Tel:* ${orderData.customer.phone}\n💰 *Total:* Q${orderData.total.toFixed(2)}\n\n🛒 *Productos:*\n${itemsDetail}`;
-        
         const url = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage?chat_id=${TELEGRAM_USER_ID}&text=${encodeURIComponent(text)}&parse_mode=Markdown`;
         
         try {
@@ -412,14 +447,14 @@ function CheckoutView({ cart, total, clearCart, setView, user, showNotification,
   const handleSubmit = async (e) => {
     e.preventDefault();
     setIsSubmitting(true);
-    const orderNumber = generateOrderId(); // Generar ID 8 dígitos
+    const orderNumber = generateOrderId(); 
 
     try {
       const batch = writeBatch(db);
       const newOrderRef = doc(collection(db, COLLECTION_NAME, 'data', 'orders'));
       const orderData = {
-        id: newOrderRef.id, // ID interno de firebase
-        orderNumber: orderNumber, // ID visible de 8 dígitos
+        id: newOrderRef.id, 
+        orderNumber: orderNumber, 
         items: cart,
         total,
         customer: formData,
@@ -435,13 +470,11 @@ function CheckoutView({ cart, total, clearCart, setView, user, showNotification,
       });
 
       await batch.commit();
-      
-      // Enviar alerta a Telegram con el nuevo ID y detalles
       notifyOwner(orderData);
 
       clearCart();
       setLastOrder({ ...orderData, createdAt: new Date() });
-      setView('order-success');
+      navigateTo('order-success', '#order-success');
     } catch (error) {
       console.error(error);
       showNotification("Error procesando pedido. Intente nuevamente.", "error");
@@ -460,7 +493,7 @@ function CheckoutView({ cart, total, clearCart, setView, user, showNotification,
         <div><label className="block text-xs font-semibold text-gray-500 mb-1">Correo Electrónico</label><div className="relative"><input required type="email" className="w-full border p-3 pl-10 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="juan@ejemplo.com" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} /><Mail className="absolute left-3 top-3.5 h-4 w-4 text-gray-400" /></div></div>
         <div><label className="block text-xs font-semibold text-gray-500 mb-1">Teléfono (WhatsApp)</label><div className="relative"><input required className="w-full border p-3 pl-10 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="5555 1234" value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} /><Smartphone className="absolute left-3 top-3.5 h-4 w-4 text-gray-400" /></div></div>
         <div className="flex justify-between items-center py-4 border-t mt-4"><span className="font-medium text-gray-700">Total a Pagar:</span><span className="text-2xl font-bold text-indigo-600">Q{total.toFixed(2)}</span></div>
-        <div className="flex gap-4 pt-2"><button type="button" onClick={() => setView('cart')} className="w-1/2 border border-gray-300 py-3 rounded-lg text-gray-700 hover:bg-gray-50">Cancelar</button><button type="submit" disabled={isSubmitting} className="w-1/2 bg-indigo-600 text-white py-3 rounded-lg font-medium hover:bg-indigo-700 disabled:opacity-50">{isSubmitting ? 'Procesando...' : 'Confirmar Pedido'}</button></div>
+        <div className="flex gap-4 pt-2"><button type="button" onClick={onBack} className="w-1/2 border border-gray-300 py-3 rounded-lg text-gray-700 hover:bg-gray-50">Cancelar</button><button type="submit" disabled={isSubmitting} className="w-1/2 bg-indigo-600 text-white py-3 rounded-lg font-medium hover:bg-indigo-700 disabled:opacity-50">{isSubmitting ? 'Procesando...' : 'Confirmar Pedido'}</button></div>
       </form>
     </div>
   );
