@@ -120,7 +120,7 @@ export default function OnlineStoreApp() {
   // --- CONFIGURACIÓN DE FAVICON Y TÍTULO ---
   useEffect(() => {
     // Cambiar título
-    document.title = "Tienda Digital GT 🛍️";
+    document.title = "PixelShop 🛍️";
     
     // Cambiar Favicon a una bolsa de compras (Emoji SVG)
     let link = document.querySelector("link[rel~='icon']");
@@ -227,7 +227,7 @@ export default function OnlineStoreApp() {
           <div className="flex justify-between h-16 items-center">
             <div className="flex items-center cursor-pointer" onClick={() => setView('store')}>
               <Store className="h-8 w-8 text-indigo-600 mr-2" />
-              <span className="font-bold text-xl tracking-tight text-gray-900">Tienda<span className="text-indigo-600">Digital</span></span>
+              <span className="font-bold text-xl tracking-tight text-gray-900">Pixel<span className="text-indigo-600">Shop</span></span>
             </div>
             <div className="flex items-center space-x-3 md:space-x-4">
               {!isAdmin && view !== 'order-success' && (
