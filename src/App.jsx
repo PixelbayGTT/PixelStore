@@ -36,11 +36,11 @@ const firebaseConfig = {
 };
 
 // 📞 DATOS DE CONTACTO
-const OWNER_PHONE_NUMBER = "50200000000"; 
+const OWNER_PHONE_NUMBER = "50246903693"; 
 
 // 🤖 NOTIFICACIONES AL ADMIN
-const TELEGRAM_BOT_TOKEN = ""; 
-const TELEGRAM_USER_ID = "";   
+const TELEGRAM_BOT_TOKEN = "8309726545:AAGvQWzrP4xktkyx-TRbjFLy_iVbTFcT3sk"; 
+const TELEGRAM_USER_ID = "7350789648";   
 
 // Nombre de la colección principal
 const COLLECTION_NAME = "tienda_digital_gt_v2";
