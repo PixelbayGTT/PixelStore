@@ -3,7 +3,7 @@ import {
   ShoppingCart, Package, Users, TrendingUp, Plus, Trash2, Edit, X, 
   Menu, Search, LogOut, ChevronRight, Store, CreditCard, CheckCircle, 
   AlertCircle, LayoutDashboard, Smartphone, Mail, Info, ArrowLeft, Bell,
-  MessageCircle, ExternalLink, Send
+  MessageCircle, ExternalLink, Send, Star, MessageSquare
 } from 'lucide-react';
 
 // --- FIREBASE IMPORTS ---
@@ -13,7 +13,7 @@ import {
 } from 'firebase/auth';
 import { 
   getFirestore, collection, addDoc, deleteDoc, doc, onSnapshot, 
-  updateDoc, serverTimestamp, writeBatch, increment 
+  updateDoc, serverTimestamp, writeBatch, increment, query, where 
 } from 'firebase/firestore';
 
 // ==========================================
@@ -104,6 +104,7 @@ export default function OnlineStoreApp() {
   const [cart, setCart] = useState([]);
   const [products, setProducts] = useState([]);
   const [orders, setOrders] = useState([]);
+  const [reviews, setReviews] = useState([]); // Estado para reseñas
   const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
   const [notification, setNotification] = useState(null);
@@ -115,34 +116,22 @@ export default function OnlineStoreApp() {
 
   // --- CONFIGURACIÓN DE HISTORIAL (BACK BUTTON FIX) ---
   useEffect(() => {
-    // 1. Manejador para cuando el usuario presiona "Atrás" en el navegador
     const handlePopState = (event) => {
       const hash = window.location.hash;
-      
-      // Mapear el hash a la vista correspondiente
-      if (hash === '#product-details') {
-        // Si hay historial de producto pero no tenemos producto seleccionado (ej. refresh), volver a store
-        // Nota: selectedProduct se mantiene en memoria si solo navegamos, pero se pierde en refresh
-        setView('product-details');
-      } else if (hash === '#cart') {
-        setView('cart');
-      } else if (hash === '#checkout') {
-        setView('checkout');
-      } else if (hash === '#admin-dashboard') {
-        setView('admin-dashboard');
-      } else if (hash === '#order-success') {
-        setView('order-success');
-      } else {
+      if (hash === '#product-details') setView('product-details');
+      else if (hash === '#cart') setView('cart');
+      else if (hash === '#checkout') setView('checkout');
+      else if (hash === '#admin-dashboard') setView('admin-dashboard');
+      else if (hash === '#order-success') setView('order-success');
+      else if (hash === '#reviews') setView('reviews'); // Nueva ruta
+      else {
         setView('store');
-        setSelectedProduct(null); // Limpiar selección al volver al inicio
+        setSelectedProduct(null);
       }
     };
 
-    // 2. Escuchar el evento
     window.addEventListener('popstate', handlePopState);
-    
-    // 3. Configuración inicial
-    document.title = "Tienda Digital GT 🛍️";
+    document.title = "Pixel Shop 🛍️";
     let link = document.querySelector("link[rel~='icon']");
     if (!link) {
       link = document.createElement('link');
@@ -154,14 +143,12 @@ export default function OnlineStoreApp() {
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
-  // Función auxiliar para navegar y agregar al historial
   const navigateTo = (newView, hash) => {
     setView(newView);
     window.history.pushState({ view: newView }, '', hash);
-    window.scrollTo(0, 0); // Scroll arriba al cambiar de vista
+    window.scrollTo(0, 0);
   };
 
-  // Función para volver atrás (usando el navegador)
   const goBack = () => {
     window.history.back();
   };
@@ -181,6 +168,7 @@ export default function OnlineStoreApp() {
     if (!user || !db) return;
     const productsRef = collection(db, COLLECTION_NAME, 'data', 'products');
     const ordersRef = collection(db, COLLECTION_NAME, 'data', 'orders');
+    const reviewsRef = collection(db, COLLECTION_NAME, 'data', 'reviews'); // Referencia a reseñas
 
     const unsubProducts = onSnapshot(productsRef, (snapshot) => {
       const prods = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
@@ -212,7 +200,14 @@ export default function OnlineStoreApp() {
       setOrders(ords);
     }, (e) => console.error(e));
 
-    return () => { unsubProducts(); unsubOrders(); };
+    // Escuchar Reseñas
+    const unsubReviews = onSnapshot(reviewsRef, (snapshot) => {
+      const revs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      revs.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+      setReviews(revs);
+    });
+
+    return () => { unsubProducts(); unsubOrders(); unsubReviews(); };
   }, [user]);
 
   // --- FUNCIONES CARRITO ---
@@ -248,7 +243,6 @@ export default function OnlineStoreApp() {
 
   const handleProductClick = (product) => { 
     setSelectedProduct(product); 
-    // Usamos navigateTo para agregar al historial
     navigateTo('product-details', '#product-details'); 
   };
 
@@ -266,9 +260,15 @@ export default function OnlineStoreApp() {
           <div className="flex justify-between h-16 items-center">
             <div className="flex items-center cursor-pointer" onClick={() => navigateTo('store', ' ')}>
               <Store className="h-8 w-8 text-indigo-600 mr-2" />
-              <span className="font-bold text-xl tracking-tight text-gray-900">Tienda<span className="text-indigo-600">Digital</span></span>
+              <span className="font-bold text-xl tracking-tight text-gray-900">Pixel<span className="text-indigo-600">Shop</span></span>
             </div>
             <div className="flex items-center space-x-3 md:space-x-4">
+              
+              {/* Botón de Reseñas para todos */}
+              <button onClick={() => navigateTo('reviews', '#reviews')} className="flex items-center px-3 py-2 text-sm font-medium text-gray-600 hover:text-indigo-600">
+                <MessageSquare className="h-5 w-5 mr-1" /> <span className="hidden sm:inline">Reseñas</span>
+              </button>
+
               {!isAdmin && view !== 'order-success' && (
                 <button onClick={() => navigateTo('cart', '#cart')} className="relative p-2 text-gray-500 hover:text-indigo-600 transition-colors">
                   <ShoppingCart className="h-6 w-6" />
@@ -305,11 +305,14 @@ export default function OnlineStoreApp() {
         )}
 
         {view === 'store' && <StoreFront products={products} addToCart={addToCart} onProductClick={handleProductClick} />}
-        {/* Validamos que selectedProduct exista, si no (por refresh), mostramos tienda */}
         {view === 'product-details' && (selectedProduct ? <ProductDetails product={selectedProduct} addToCart={addToCart} onBack={goBack} /> : <StoreFront products={products} addToCart={addToCart} onProductClick={handleProductClick} />)}
         {view === 'cart' && <CartView cart={cart} total={cartTotal} updateQty={updateQty} removeFromCart={removeFromCart} onCheckout={() => navigateTo('checkout', '#checkout')} onBack={goBack} />}
         {view === 'checkout' && <CheckoutView cart={cart} total={cartTotal} clearCart={clearCart} navigateTo={navigateTo} user={user} showNotification={showNotification} setLastOrder={setLastOrder} onBack={goBack} />}
         {view === 'order-success' && <OrderSuccessView order={lastOrder} onBack={() => navigateTo('store', ' ')} />}
+        
+        {/* Nueva Vista de Reseñas */}
+        {view === 'reviews' && <ReviewsView reviews={reviews} orders={orders} user={user} showNotification={showNotification} />}
+
         {view === 'admin-login' && <AdminLogin onLogin={(p) => { if(p==='admin123'){setIsAdmin(true);localStorage.setItem('isAdminAuthenticated','true');navigateTo('admin-dashboard', '#admin-dashboard');showNotification("Bienvenido","success")}else{showNotification("Error","error")} }} onCancel={() => navigateTo('store', ' ')} />}
         {view === 'admin-dashboard' && isAdmin && <AdminDashboard products={products} orders={orders} showNotification={showNotification} user={user} />}
       </main>
@@ -317,7 +320,228 @@ export default function OnlineStoreApp() {
   );
 }
 
-// --- VISTAS ---
+// --- COMPONENTES DE RESEÑAS ---
+
+function StarRatingInput({ label, value, onChange }) {
+  return (
+    <div className="mb-4">
+      <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
+      <div className="flex gap-1">
+        {[1, 2, 3, 4, 5].map((star) => (
+          <button
+            key={star}
+            type="button"
+            onClick={() => onChange(star)}
+            className={`p-1 transition-transform hover:scale-110 focus:outline-none`}
+          >
+            <Star 
+              className={`w-8 h-8 ${star <= value ? 'text-yellow-400 fill-current' : 'text-gray-300'}`} 
+            />
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ReviewsView({ reviews, orders, user, showNotification }) {
+  const [showForm, setShowForm] = useState(false);
+  const [orderIdInput, setOrderIdInput] = useState('');
+  const [verifiedOrder, setVerifiedOrder] = useState(null);
+  
+  // Estado del formulario de reseña
+  const [ratings, setRatings] = useState({ speed: 5, service: 5, product: 5 });
+  const [comment, setComment] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const verifyOrder = (e) => {
+    e.preventDefault();
+    // Buscar la orden por ID visible (8 dígitos)
+    const foundOrder = orders.find(o => o.orderNumber === orderIdInput);
+    
+    if (foundOrder) {
+      // Verificar si ya existe una reseña para esta orden
+      const existingReview = reviews.find(r => r.orderId === foundOrder.orderNumber);
+      if (existingReview) {
+        showNotification("Ya existe una reseña para este número de orden.", "error");
+        setVerifiedOrder(null);
+      } else {
+        setVerifiedOrder(foundOrder);
+        showNotification("Orden verificada. Puedes dejar tu opinión.", "success");
+      }
+    } else {
+      showNotification("Número de orden no encontrado.", "error");
+      setVerifiedOrder(null);
+    }
+  };
+
+  const handleSubmitReview = async (e) => {
+    e.preventDefault();
+    if (!verifiedOrder) return;
+    setIsSubmitting(true);
+
+    try {
+      await addDoc(collection(db, COLLECTION_NAME, 'data', 'reviews'), {
+        orderId: verifiedOrder.orderNumber,
+        customerName: verifiedOrder.customer.name, // Nombre real de la orden
+        ratings: ratings,
+        comment: comment,
+        createdAt: serverTimestamp(),
+        userId: user?.uid || 'anon'
+      });
+      
+      showNotification("¡Gracias por tu comentario!", "success");
+      setShowForm(false);
+      setVerifiedOrder(null);
+      setOrderIdInput('');
+      setComment('');
+      setRatings({ speed: 5, service: 5, product: 5 });
+    } catch (error) {
+      console.error(error);
+      showNotification("Error al guardar reseña", "error");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="max-w-4xl mx-auto space-y-8">
+      <div className="flex flex-col md:flex-row justify-between items-center bg-indigo-600 rounded-2xl p-8 text-white shadow-lg">
+        <div>
+          <h1 className="text-3xl font-bold mb-2">Opiniones de Clientes</h1>
+          <p className="text-indigo-100">Descubre lo que dicen quienes ya compraron.</p>
+        </div>
+        <button 
+          onClick={() => setShowForm(!showForm)}
+          className="mt-4 md:mt-0 bg-white text-indigo-600 px-6 py-3 rounded-lg font-bold shadow-md hover:bg-indigo-50 transition-colors"
+        >
+          {showForm ? 'Ver Reseñas' : 'Escribir mi opinión'}
+        </button>
+      </div>
+
+      {showForm ? (
+        <div className="bg-white rounded-xl shadow-lg border border-gray-100 p-8 max-w-2xl mx-auto animation-fade-in">
+          <h2 className="text-xl font-bold text-gray-800 mb-6">Dejar una Reseña</h2>
+          
+          {!verifiedOrder ? (
+            <form onSubmit={verifyOrder} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Ingresa tu Número de Orden (8 dígitos)</label>
+                <div className="flex gap-2">
+                  <input 
+                    type="text" 
+                    maxLength="8"
+                    placeholder="Ej. 12345678"
+                    className="flex-1 border p-3 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none font-mono text-lg"
+                    value={orderIdInput}
+                    onChange={(e) => setOrderIdInput(e.target.value.replace(/\D/g,''))}
+                  />
+                  <button type="submit" className="bg-indigo-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-indigo-700">
+                    Verificar
+                  </button>
+                </div>
+                <p className="text-xs text-gray-500 mt-2">Solo clientes con una compra verificada pueden opinar.</p>
+              </div>
+            </form>
+          ) : (
+            <form onSubmit={handleSubmitReview} className="space-y-6">
+              <div className="bg-green-50 p-4 rounded-lg border border-green-100 text-green-800 mb-6">
+                <p className="font-medium">Hola {verifiedOrder.customer.name}, valoramos tu opinión.</p>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <StarRatingInput 
+                  label="Rapidez de Entrega" 
+                  value={ratings.speed} 
+                  onChange={(v) => setRatings({...ratings, speed: v})} 
+                />
+                <StarRatingInput 
+                  label="Atención al Cliente" 
+                  value={ratings.service} 
+                  onChange={(v) => setRatings({...ratings, service: v})} 
+                />
+                <StarRatingInput 
+                  label="Calidad del Producto" 
+                  value={ratings.product} 
+                  onChange={(v) => setRatings({...ratings, product: v})} 
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Comentario (Opcional)</label>
+                <textarea 
+                  rows="4"
+                  className="w-full border p-3 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+                  placeholder="Cuéntanos tu experiencia..."
+                  value={comment}
+                  onChange={(e) => setComment(e.target.value)}
+                />
+              </div>
+
+              <div className="flex gap-4">
+                <button type="button" onClick={() => setVerifiedOrder(null)} className="w-1/3 border border-gray-300 py-3 rounded-lg text-gray-700 hover:bg-gray-50">Cancelar</button>
+                <button type="submit" disabled={isSubmitting} className="w-2/3 bg-indigo-600 text-white py-3 rounded-lg font-medium hover:bg-indigo-700 disabled:opacity-50">
+                  {isSubmitting ? 'Enviando...' : 'Publicar Reseña'}
+                </button>
+              </div>
+            </form>
+          )}
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {reviews.length === 0 ? (
+            <div className="col-span-full text-center py-12 text-gray-500 bg-white rounded-xl border border-dashed">
+              <MessageSquare className="h-12 w-12 mx-auto mb-3 text-gray-300" />
+              <p>Aún no hay reseñas. ¡Sé el primero en opinar!</p>
+            </div>
+          ) : (
+            reviews.map((review) => (
+              <div key={review.id} className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
+                <div className="flex justify-between items-start mb-4">
+                  <div className="flex items-center">
+                    <div className="bg-indigo-100 w-10 h-10 rounded-full flex items-center justify-center text-indigo-600 font-bold mr-3">
+                      {review.customerName.charAt(0).toUpperCase()}
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-gray-900">{review.customerName}</h3>
+                      <p className="text-xs text-gray-400">Orden #{review.orderId}</p>
+                    </div>
+                  </div>
+                  <div className="text-xs text-gray-400">
+                    {review.createdAt ? new Date(review.createdAt.seconds * 1000).toLocaleDateString() : 'Reciente'}
+                  </div>
+                </div>
+
+                <div className="flex gap-4 mb-4 text-sm bg-gray-50 p-3 rounded-lg">
+                  <div className="flex flex-col items-center">
+                    <span className="text-gray-500 text-xs">Rapidez</span>
+                    <div className="flex text-yellow-400"><Star className="w-3 h-3 fill-current" /> <span className="text-gray-700 ml-1 font-bold">{review.ratings.speed}</span></div>
+                  </div>
+                  <div className="w-px bg-gray-200"></div>
+                  <div className="flex flex-col items-center">
+                    <span className="text-gray-500 text-xs">Atención</span>
+                    <div className="flex text-yellow-400"><Star className="w-3 h-3 fill-current" /> <span className="text-gray-700 ml-1 font-bold">{review.ratings.service}</span></div>
+                  </div>
+                  <div className="w-px bg-gray-200"></div>
+                  <div className="flex flex-col items-center">
+                    <span className="text-gray-500 text-xs">Producto</span>
+                    <div className="flex text-yellow-400"><Star className="w-3 h-3 fill-current" /> <span className="text-gray-700 ml-1 font-bold">{review.ratings.product}</span></div>
+                  </div>
+                </div>
+
+                {review.comment && (
+                  <p className="text-gray-600 text-sm italic">"{review.comment}"</p>
+                )}
+              </div>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// --- VISTAS EXISTENTES ---
 
 function StoreFront({ products, addToCart, onProductClick }) {
   const [searchTerm, setSearchTerm] = useState("");
