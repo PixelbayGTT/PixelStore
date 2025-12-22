@@ -3,7 +3,8 @@ import {
   ShoppingCart, Package, Users, TrendingUp, Plus, Trash2, Edit, X, 
   Menu, Search, LogOut, ChevronRight, Store, CreditCard, CheckCircle, 
   AlertCircle, LayoutDashboard, Smartphone, Mail, Info, ArrowLeft, Bell,
-  MessageCircle, ExternalLink, Send, Star, MessageSquare, Copy, Link as LinkIcon
+  MessageCircle, ExternalLink, Send, Star, MessageSquare, Copy, Link as LinkIcon,
+  BarChart2
 } from 'lucide-react';
 
 // --- FIREBASE IMPORTS ---
@@ -20,19 +21,12 @@ import {
 // ⚠️ ZONA DE CONFIGURACIÓN OBLIGATORIA ⚠️
 // ==========================================
 const firebaseConfig = {
-
   apiKey: "AIzaSyBpRGVRQZztDseOlTlmFSEGY2ur84_uEnI",
-
   authDomain: "pixelstore-dfba1.firebaseapp.com",
-
   projectId: "pixelstore-dfba1",
-
   storageBucket: "pixelstore-dfba1.firebasestorage.app",
-
   messagingSenderId: "826051147714",
-
   appId: "1:826051147714:web:2378fb1ee7cda036d4c85b"
-
 };
 
 // 📞 DATOS DE CONTACTO
@@ -341,6 +335,23 @@ function StarRatingInput({ label, value, onChange }) {
   );
 }
 
+// Componente para barras de progreso en el resumen
+function RatingBar({ label, value, max = 5 }) {
+  const percentage = (value / max) * 100;
+  return (
+    <div className="flex items-center text-sm mb-2">
+      <span className="w-24 text-gray-600 font-medium">{label}</span>
+      <div className="flex-1 h-3 mx-3 bg-gray-200 rounded-full overflow-hidden">
+        <div 
+          className="h-full bg-yellow-400 rounded-full transition-all duration-500" 
+          style={{ width: `${percentage}%` }}
+        ></div>
+      </div>
+      <span className="w-8 text-right font-bold text-gray-700">{value}</span>
+    </div>
+  );
+}
+
 function ReviewsView({ reviews, orders, user, showNotification, isAdmin }) {
   const [showForm, setShowForm] = useState(false);
   const [orderIdInput, setOrderIdInput] = useState('');
@@ -350,12 +361,29 @@ function ReviewsView({ reviews, orders, user, showNotification, isAdmin }) {
   const [comment, setComment] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Calcular estadísticas generales
+  const stats = useMemo(() => {
+    if (reviews.length === 0) return null;
+    const total = reviews.length;
+    const sumSpeed = reviews.reduce((acc, r) => acc + (r.ratings?.speed || 0), 0);
+    const sumService = reviews.reduce((acc, r) => acc + (r.ratings?.service || 0), 0);
+    const sumProduct = reviews.reduce((acc, r) => acc + (r.ratings?.product || 0), 0);
+
+    const avgSpeed = (sumSpeed / total).toFixed(1);
+    const avgService = (sumService / total).toFixed(1);
+    const avgProduct = (sumProduct / total).toFixed(1);
+    
+    // Promedio total ponderado
+    const overall = ((parseFloat(avgSpeed) + parseFloat(avgService) + parseFloat(avgProduct)) / 3).toFixed(1);
+
+    return { total, avgSpeed, avgService, avgProduct, overall };
+  }, [reviews]);
+
   const copyReviewsLink = () => {
     const url = window.location.origin + '/#reviews';
     navigator.clipboard.writeText(url).then(() => {
       showNotification("¡Enlace de reseñas copiado!", "success");
     }).catch(() => {
-      // Fallback para iframes o navegadores antiguos
       const textArea = document.createElement("textarea");
       textArea.value = url;
       document.body.appendChild(textArea);
@@ -373,7 +401,6 @@ function ReviewsView({ reviews, orders, user, showNotification, isAdmin }) {
   const verifyOrder = (e) => {
     e.preventDefault();
     const foundOrder = orders.find(o => o.orderNumber === orderIdInput);
-    
     if (foundOrder) {
       const existingReview = reviews.find(r => r.orderId === foundOrder.orderNumber);
       if (existingReview) {
@@ -393,21 +420,17 @@ function ReviewsView({ reviews, orders, user, showNotification, isAdmin }) {
     e.preventDefault();
     if (!verifiedOrder) return;
     setIsSubmitting(true);
-
     try {
-      // Extraer nombres de productos para mostrar en la reseña
       const productNames = verifiedOrder.items.map(i => `${i.qty}x ${i.name}`).join(', ');
-
       await addDoc(collection(db, COLLECTION_NAME, 'data', 'reviews'), {
         orderId: verifiedOrder.orderNumber,
         customerName: verifiedOrder.customer.name,
-        productNames: productNames, // Guardar productos
+        productNames: productNames,
         ratings: ratings,
         comment: comment,
         createdAt: serverTimestamp(),
         userId: user?.uid || 'anon'
       });
-      
       showNotification("¡Gracias por tu comentario!", "success");
       setShowForm(false);
       setVerifiedOrder(null);
@@ -456,53 +479,58 @@ function ReviewsView({ reviews, orders, user, showNotification, isAdmin }) {
         </div>
       </div>
 
+      {/* --- TARJETA DE RESUMEN DE ESTADÍSTICAS --- */}
+      {stats && (
+        <div className="bg-white rounded-xl shadow-md border border-gray-100 p-6 md:p-8 flex flex-col md:flex-row gap-8 items-center justify-center animation-fade-in">
+            {/* Promedio General */}
+            <div className="text-center md:border-r md:border-gray-200 md:pr-8 w-full md:w-auto">
+                <div className="text-5xl font-extrabold text-gray-900 mb-2">{stats.overall}</div>
+                <div className="flex justify-center text-yellow-400 mb-2">
+                    {[1, 2, 3, 4, 5].map(star => (
+                        <Star key={star} className={`w-6 h-6 ${star <= Math.round(stats.overall) ? 'fill-current' : 'text-gray-200'}`} />
+                    ))}
+                </div>
+                <p className="text-gray-500 text-sm">Basado en {stats.total} opiniones</p>
+            </div>
+
+            {/* Desglose por Categoría */}
+            <div className="flex-1 w-full max-w-md">
+                <h3 className="font-bold text-gray-800 mb-4 flex items-center">
+                    <BarChart2 className="w-5 h-5 mr-2 text-indigo-600" /> Resumen del Servicio
+                </h3>
+                <RatingBar label="Rapidez" value={stats.avgSpeed} />
+                <RatingBar label="Atención" value={stats.avgService} />
+                <RatingBar label="Producto" value={stats.avgProduct} />
+            </div>
+        </div>
+      )}
+
       {showForm ? (
         <div className="bg-white rounded-xl shadow-lg border border-gray-100 p-8 max-w-2xl mx-auto animation-fade-in">
           <h2 className="text-xl font-bold text-gray-800 mb-6">Dejar una Reseña</h2>
-          
           {!verifiedOrder ? (
             <form onSubmit={verifyOrder} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Ingresa tu Número de Orden (8 dígitos)</label>
                 <div className="flex gap-2">
-                  <input 
-                    type="text" 
-                    maxLength="8"
-                    placeholder="Ej. 12345678"
-                    className="flex-1 border p-3 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none font-mono text-lg"
-                    value={orderIdInput}
-                    onChange={(e) => setOrderIdInput(e.target.value.replace(/\D/g,''))}
-                  />
-                  <button type="submit" className="bg-indigo-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-indigo-700">
-                    Verificar
-                  </button>
+                  <input type="text" maxLength="8" placeholder="Ej. 12345678" className="flex-1 border p-3 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none font-mono text-lg" value={orderIdInput} onChange={(e) => setOrderIdInput(e.target.value.replace(/\D/g,''))} />
+                  <button type="submit" className="bg-indigo-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-indigo-700">Verificar</button>
                 </div>
                 <p className="text-xs text-gray-500 mt-2">Solo clientes con una compra verificada pueden opinar.</p>
               </div>
             </form>
           ) : (
             <form onSubmit={handleSubmitReview} className="space-y-6">
-              <div className="bg-green-50 p-4 rounded-lg border border-green-100 text-green-800 mb-6">
-                <p className="font-medium">Hola {verifiedOrder.customer.name}, valoramos tu opinión.</p>
-              </div>
-
-              {/* Layout Vertical de Estrellas */}
+              <div className="bg-green-50 p-4 rounded-lg border border-green-100 text-green-800 mb-6"><p className="font-medium">Hola {verifiedOrder.customer.name}, valoramos tu opinión.</p></div>
               <div className="space-y-4">
                 <StarRatingInput label="🚀 Rapidez de Entrega" value={ratings.speed} onChange={(v) => setRatings({...ratings, speed: v})} />
                 <StarRatingInput label="💬 Atención al Cliente" value={ratings.service} onChange={(v) => setRatings({...ratings, service: v})} />
                 <StarRatingInput label="📦 Calidad del Producto" value={ratings.product} onChange={(v) => setRatings({...ratings, product: v})} />
               </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Comentario (Opcional)</label>
-                <textarea rows="4" className="w-full border p-3 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="Cuéntanos tu experiencia..." value={comment} onChange={(e) => setComment(e.target.value)} />
-              </div>
-
+              <div><label className="block text-sm font-medium text-gray-700 mb-1">Comentario (Opcional)</label><textarea rows="4" className="w-full border p-3 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="Cuéntanos tu experiencia..." value={comment} onChange={(e) => setComment(e.target.value)} /></div>
               <div className="flex gap-4">
                 <button type="button" onClick={() => setVerifiedOrder(null)} className="w-1/3 border border-gray-300 py-3 rounded-lg text-gray-700 hover:bg-gray-50">Cancelar</button>
-                <button type="submit" disabled={isSubmitting} className="w-2/3 bg-indigo-600 text-white py-3 rounded-lg font-medium hover:bg-indigo-700 disabled:opacity-50">
-                  {isSubmitting ? 'Enviando...' : 'Publicar Reseña'}
-                </button>
+                <button type="submit" disabled={isSubmitting} className="w-2/3 bg-indigo-600 text-white py-3 rounded-lg font-medium hover:bg-indigo-700 disabled:opacity-50">{isSubmitting ? 'Enviando...' : 'Publicar Reseña'}</button>
               </div>
             </form>
           )}
@@ -517,58 +545,24 @@ function ReviewsView({ reviews, orders, user, showNotification, isAdmin }) {
           ) : (
             reviews.map((review) => (
               <div key={review.id} className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow relative">
-                
-                {/* Botón de Borrar para Admin */}
                 {isAdmin && (
-                    <button 
-                        onClick={() => handleDeleteReview(review.id)}
-                        className="absolute top-4 right-4 text-gray-400 hover:text-red-500"
-                        title="Eliminar Reseña"
-                    >
-                        <Trash2 className="h-4 w-4" />
-                    </button>
+                    <button onClick={() => handleDeleteReview(review.id)} className="absolute top-4 right-4 text-gray-400 hover:text-red-500" title="Eliminar Reseña"><Trash2 className="h-4 w-4" /></button>
                 )}
-
                 <div className="flex justify-between items-start mb-4 pr-8">
                   <div className="flex items-center">
-                    <div className="bg-indigo-100 w-10 h-10 rounded-full flex items-center justify-center text-indigo-600 font-bold mr-3">
-                      {review.customerName.charAt(0).toUpperCase()}
-                    </div>
-                    <div>
-                      <h3 className="font-bold text-gray-900">{review.customerName}</h3>
-                      {/* Mostrar producto adquirido en lugar del ID de orden */}
-                      <p className="text-xs text-indigo-600 font-medium">{review.productNames || `Orden #${review.orderId}`}</p>
-                    </div>
+                    <div className="bg-indigo-100 w-10 h-10 rounded-full flex items-center justify-center text-indigo-600 font-bold mr-3">{review.customerName.charAt(0).toUpperCase()}</div>
+                    <div><h3 className="font-bold text-gray-900">{review.customerName}</h3><p className="text-xs text-indigo-600 font-medium">{review.productNames || `Orden #${review.orderId}`}</p></div>
                   </div>
                 </div>
-
-                {/* Calificaciones en Vertical */}
                 <div className="flex flex-col gap-2 mb-4 text-sm bg-gray-50 p-3 rounded-lg">
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-500 text-xs">Rapidez</span>
-                    <div className="flex text-yellow-400"><Star className="w-3 h-3 fill-current" /> <span className="text-gray-700 ml-1 font-bold">{review.ratings.speed}</span></div>
-                  </div>
+                  <div className="flex justify-between items-center"><span className="text-gray-500 text-xs">Rapidez</span><div className="flex text-yellow-400"><Star className="w-3 h-3 fill-current" /> <span className="text-gray-700 ml-1 font-bold">{review.ratings.speed}</span></div></div>
                   <div className="h-px bg-gray-200 w-full"></div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-500 text-xs">Atención</span>
-                    <div className="flex text-yellow-400"><Star className="w-3 h-3 fill-current" /> <span className="text-gray-700 ml-1 font-bold">{review.ratings.service}</span></div>
-                  </div>
+                  <div className="flex justify-between items-center"><span className="text-gray-500 text-xs">Atención</span><div className="flex text-yellow-400"><Star className="w-3 h-3 fill-current" /> <span className="text-gray-700 ml-1 font-bold">{review.ratings.service}</span></div></div>
                   <div className="h-px bg-gray-200 w-full"></div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-500 text-xs">Producto</span>
-                    <div className="flex text-yellow-400"><Star className="w-3 h-3 fill-current" /> <span className="text-gray-700 ml-1 font-bold">{review.ratings.product}</span></div>
-                  </div>
+                  <div className="flex justify-between items-center"><span className="text-gray-500 text-xs">Producto</span><div className="flex text-yellow-400"><Star className="w-3 h-3 fill-current" /> <span className="text-gray-700 ml-1 font-bold">{review.ratings.product}</span></div></div>
                 </div>
-
-                {review.comment && (
-                  <p className="text-gray-600 text-sm italic">"{review.comment}"</p>
-                )}
-                
-                <div className="mt-2 text-right">
-                    <span className="text-[10px] text-gray-400">
-                        {review.createdAt ? new Date(review.createdAt.seconds * 1000).toLocaleDateString() : 'Reciente'}
-                    </span>
-                </div>
+                {review.comment && <p className="text-gray-600 text-sm italic">"{review.comment}"</p>}
+                <div className="mt-2 text-right"><span className="text-[10px] text-gray-400">{review.createdAt ? new Date(review.createdAt.seconds * 1000).toLocaleDateString() : 'Reciente'}</span></div>
               </div>
             ))
           )}
@@ -577,6 +571,8 @@ function ReviewsView({ reviews, orders, user, showNotification, isAdmin }) {
     </div>
   );
 }
+
+// --- VISTAS EXISTENTES ---
 
 function StoreFront({ products, addToCart, onProductClick }) {
   const [searchTerm, setSearchTerm] = useState("");
