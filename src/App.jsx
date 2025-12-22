@@ -3,7 +3,7 @@ import {
   ShoppingCart, Package, Users, TrendingUp, Plus, Trash2, Edit, X, 
   Menu, Search, LogOut, ChevronRight, Store, CreditCard, CheckCircle, 
   AlertCircle, LayoutDashboard, Smartphone, Mail, Info, ArrowLeft, Bell,
-  MessageCircle, ExternalLink, Send, Star, MessageSquare
+  MessageCircle, ExternalLink, Send, Star, MessageSquare, Copy, Link as LinkIcon
 } from 'lucide-react';
 
 // --- FIREBASE IMPORTS ---
@@ -104,7 +104,7 @@ export default function OnlineStoreApp() {
   const [cart, setCart] = useState([]);
   const [products, setProducts] = useState([]);
   const [orders, setOrders] = useState([]);
-  const [reviews, setReviews] = useState([]); // Estado para reseñas
+  const [reviews, setReviews] = useState([]); 
   const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
   const [notification, setNotification] = useState(null);
@@ -114,7 +114,7 @@ export default function OnlineStoreApp() {
 
   const pendingOrdersCount = useMemo(() => orders.filter(o => o.status === 'pending').length, [orders]);
 
-  // --- CONFIGURACIÓN DE HISTORIAL (BACK BUTTON FIX) ---
+  // --- CONFIGURACIÓN DE HISTORIAL ---
   useEffect(() => {
     const handlePopState = (event) => {
       const hash = window.location.hash;
@@ -123,7 +123,7 @@ export default function OnlineStoreApp() {
       else if (hash === '#checkout') setView('checkout');
       else if (hash === '#admin-dashboard') setView('admin-dashboard');
       else if (hash === '#order-success') setView('order-success');
-      else if (hash === '#reviews') setView('reviews'); // Nueva ruta
+      else if (hash === '#reviews') setView('reviews'); 
       else {
         setView('store');
         setSelectedProduct(null);
@@ -131,6 +131,10 @@ export default function OnlineStoreApp() {
     };
 
     window.addEventListener('popstate', handlePopState);
+    
+    // Check initial hash
+    handlePopState();
+
     document.title = "Pixel Shop 🛍️";
     let link = document.querySelector("link[rel~='icon']");
     if (!link) {
@@ -168,7 +172,7 @@ export default function OnlineStoreApp() {
     if (!user || !db) return;
     const productsRef = collection(db, COLLECTION_NAME, 'data', 'products');
     const ordersRef = collection(db, COLLECTION_NAME, 'data', 'orders');
-    const reviewsRef = collection(db, COLLECTION_NAME, 'data', 'reviews'); // Referencia a reseñas
+    const reviewsRef = collection(db, COLLECTION_NAME, 'data', 'reviews');
 
     const unsubProducts = onSnapshot(productsRef, (snapshot) => {
       const prods = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
@@ -200,7 +204,6 @@ export default function OnlineStoreApp() {
       setOrders(ords);
     }, (e) => console.error(e));
 
-    // Escuchar Reseñas
     const unsubReviews = onSnapshot(reviewsRef, (snapshot) => {
       const revs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       revs.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
@@ -210,7 +213,6 @@ export default function OnlineStoreApp() {
     return () => { unsubProducts(); unsubOrders(); unsubReviews(); };
   }, [user]);
 
-  // --- FUNCIONES CARRITO ---
   const addToCart = (product) => {
     setCart(prev => {
       const existing = prev.find(item => item.id === product.id);
@@ -250,7 +252,6 @@ export default function OnlineStoreApp() {
   const clearCart = () => setCart([]);
   const showNotification = (msg, type = 'info') => { setNotification({ msg, type }); setTimeout(() => setNotification(null), 5000); };
 
-  // --- RENDER ---
   if (loading && user) return <div className="flex h-screen items-center justify-center text-gray-600">Cargando sistema...</div>;
 
   return (
@@ -264,7 +265,6 @@ export default function OnlineStoreApp() {
             </div>
             <div className="flex items-center space-x-3 md:space-x-4">
               
-              {/* Botón de Reseñas para todos */}
               <button onClick={() => navigateTo('reviews', '#reviews')} className="flex items-center px-3 py-2 text-sm font-medium text-gray-600 hover:text-indigo-600">
                 <MessageSquare className="h-5 w-5 mr-1" /> <span className="hidden sm:inline">Reseñas</span>
               </button>
@@ -310,8 +310,7 @@ export default function OnlineStoreApp() {
         {view === 'checkout' && <CheckoutView cart={cart} total={cartTotal} clearCart={clearCart} navigateTo={navigateTo} user={user} showNotification={showNotification} setLastOrder={setLastOrder} onBack={goBack} />}
         {view === 'order-success' && <OrderSuccessView order={lastOrder} onBack={() => navigateTo('store', ' ')} />}
         
-        {/* Nueva Vista de Reseñas */}
-        {view === 'reviews' && <ReviewsView reviews={reviews} orders={orders} user={user} showNotification={showNotification} />}
+        {view === 'reviews' && <ReviewsView reviews={reviews} orders={orders} user={user} showNotification={showNotification} isAdmin={isAdmin} />}
 
         {view === 'admin-login' && <AdminLogin onLogin={(p) => { if(p==='admin123'){setIsAdmin(true);localStorage.setItem('isAdminAuthenticated','true');navigateTo('admin-dashboard', '#admin-dashboard');showNotification("Bienvenido","success")}else{showNotification("Error","error")} }} onCancel={() => navigateTo('store', ' ')} />}
         {view === 'admin-dashboard' && isAdmin && <AdminDashboard products={products} orders={orders} showNotification={showNotification} user={user} />}
@@ -319,8 +318,6 @@ export default function OnlineStoreApp() {
     </div>
   );
 }
-
-// --- COMPONENTES DE RESEÑAS ---
 
 function StarRatingInput({ label, value, onChange }) {
   return (
@@ -344,23 +341,40 @@ function StarRatingInput({ label, value, onChange }) {
   );
 }
 
-function ReviewsView({ reviews, orders, user, showNotification }) {
+function ReviewsView({ reviews, orders, user, showNotification, isAdmin }) {
   const [showForm, setShowForm] = useState(false);
   const [orderIdInput, setOrderIdInput] = useState('');
   const [verifiedOrder, setVerifiedOrder] = useState(null);
   
-  // Estado del formulario de reseña
   const [ratings, setRatings] = useState({ speed: 5, service: 5, product: 5 });
   const [comment, setComment] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  const copyReviewsLink = () => {
+    const url = window.location.origin + '/#reviews';
+    navigator.clipboard.writeText(url).then(() => {
+      showNotification("¡Enlace de reseñas copiado!", "success");
+    }).catch(() => {
+      // Fallback para iframes o navegadores antiguos
+      const textArea = document.createElement("textarea");
+      textArea.value = url;
+      document.body.appendChild(textArea);
+      textArea.select();
+      try {
+        document.execCommand('copy');
+        showNotification("¡Enlace de reseñas copiado!", "success");
+      } catch (err) {
+        showNotification("No se pudo copiar el enlace", "error");
+      }
+      document.body.removeChild(textArea);
+    });
+  };
+
   const verifyOrder = (e) => {
     e.preventDefault();
-    // Buscar la orden por ID visible (8 dígitos)
     const foundOrder = orders.find(o => o.orderNumber === orderIdInput);
     
     if (foundOrder) {
-      // Verificar si ya existe una reseña para esta orden
       const existingReview = reviews.find(r => r.orderId === foundOrder.orderNumber);
       if (existingReview) {
         showNotification("Ya existe una reseña para este número de orden.", "error");
@@ -381,9 +395,13 @@ function ReviewsView({ reviews, orders, user, showNotification }) {
     setIsSubmitting(true);
 
     try {
+      // Extraer nombres de productos para mostrar en la reseña
+      const productNames = verifiedOrder.items.map(i => `${i.qty}x ${i.name}`).join(', ');
+
       await addDoc(collection(db, COLLECTION_NAME, 'data', 'reviews'), {
         orderId: verifiedOrder.orderNumber,
-        customerName: verifiedOrder.customer.name, // Nombre real de la orden
+        customerName: verifiedOrder.customer.name,
+        productNames: productNames, // Guardar productos
         ratings: ratings,
         comment: comment,
         createdAt: serverTimestamp(),
@@ -404,6 +422,17 @@ function ReviewsView({ reviews, orders, user, showNotification }) {
     }
   };
 
+  const handleDeleteReview = async (id) => {
+    if (window.confirm('¿Borrar esta reseña permanentemente?')) {
+        try {
+            await deleteDoc(doc(db, COLLECTION_NAME, 'data', 'reviews', id));
+            showNotification("Reseña eliminada", "success");
+        } catch (e) {
+            showNotification("Error al eliminar", "error");
+        }
+    }
+  };
+
   return (
     <div className="max-w-4xl mx-auto space-y-8">
       <div className="flex flex-col md:flex-row justify-between items-center bg-indigo-600 rounded-2xl p-8 text-white shadow-lg">
@@ -411,12 +440,20 @@ function ReviewsView({ reviews, orders, user, showNotification }) {
           <h1 className="text-3xl font-bold mb-2">Opiniones de Clientes</h1>
           <p className="text-indigo-100">Descubre lo que dicen quienes ya compraron.</p>
         </div>
-        <button 
-          onClick={() => setShowForm(!showForm)}
-          className="mt-4 md:mt-0 bg-white text-indigo-600 px-6 py-3 rounded-lg font-bold shadow-md hover:bg-indigo-50 transition-colors"
-        >
-          {showForm ? 'Ver Reseñas' : 'Escribir mi opinión'}
-        </button>
+        <div className="flex flex-col gap-2 mt-4 md:mt-0">
+            <button 
+            onClick={() => setShowForm(!showForm)}
+            className="bg-white text-indigo-600 px-6 py-3 rounded-lg font-bold shadow-md hover:bg-indigo-50 transition-colors"
+            >
+            {showForm ? 'Ver Reseñas' : 'Escribir mi opinión'}
+            </button>
+            <button 
+                onClick={copyReviewsLink}
+                className="flex items-center justify-center text-indigo-100 hover:text-white text-sm"
+            >
+                <LinkIcon className="w-4 h-4 mr-1" /> Copiar enlace directo
+            </button>
+        </div>
       </div>
 
       {showForm ? (
@@ -449,33 +486,16 @@ function ReviewsView({ reviews, orders, user, showNotification }) {
                 <p className="font-medium">Hola {verifiedOrder.customer.name}, valoramos tu opinión.</p>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <StarRatingInput 
-                  label="Rapidez de Entrega" 
-                  value={ratings.speed} 
-                  onChange={(v) => setRatings({...ratings, speed: v})} 
-                />
-                <StarRatingInput 
-                  label="Atención al Cliente" 
-                  value={ratings.service} 
-                  onChange={(v) => setRatings({...ratings, service: v})} 
-                />
-                <StarRatingInput 
-                  label="Calidad del Producto" 
-                  value={ratings.product} 
-                  onChange={(v) => setRatings({...ratings, product: v})} 
-                />
+              {/* Layout Vertical de Estrellas */}
+              <div className="space-y-4">
+                <StarRatingInput label="🚀 Rapidez de Entrega" value={ratings.speed} onChange={(v) => setRatings({...ratings, speed: v})} />
+                <StarRatingInput label="💬 Atención al Cliente" value={ratings.service} onChange={(v) => setRatings({...ratings, service: v})} />
+                <StarRatingInput label="📦 Calidad del Producto" value={ratings.product} onChange={(v) => setRatings({...ratings, product: v})} />
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Comentario (Opcional)</label>
-                <textarea 
-                  rows="4"
-                  className="w-full border p-3 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
-                  placeholder="Cuéntanos tu experiencia..."
-                  value={comment}
-                  onChange={(e) => setComment(e.target.value)}
-                />
+                <textarea rows="4" className="w-full border p-3 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="Cuéntanos tu experiencia..." value={comment} onChange={(e) => setComment(e.target.value)} />
               </div>
 
               <div className="flex gap-4">
@@ -496,34 +516,45 @@ function ReviewsView({ reviews, orders, user, showNotification }) {
             </div>
           ) : (
             reviews.map((review) => (
-              <div key={review.id} className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
-                <div className="flex justify-between items-start mb-4">
+              <div key={review.id} className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow relative">
+                
+                {/* Botón de Borrar para Admin */}
+                {isAdmin && (
+                    <button 
+                        onClick={() => handleDeleteReview(review.id)}
+                        className="absolute top-4 right-4 text-gray-400 hover:text-red-500"
+                        title="Eliminar Reseña"
+                    >
+                        <Trash2 className="h-4 w-4" />
+                    </button>
+                )}
+
+                <div className="flex justify-between items-start mb-4 pr-8">
                   <div className="flex items-center">
                     <div className="bg-indigo-100 w-10 h-10 rounded-full flex items-center justify-center text-indigo-600 font-bold mr-3">
                       {review.customerName.charAt(0).toUpperCase()}
                     </div>
                     <div>
                       <h3 className="font-bold text-gray-900">{review.customerName}</h3>
-                      <p className="text-xs text-gray-400">Orden #{review.orderId}</p>
+                      {/* Mostrar producto adquirido en lugar del ID de orden */}
+                      <p className="text-xs text-indigo-600 font-medium">{review.productNames || `Orden #${review.orderId}`}</p>
                     </div>
-                  </div>
-                  <div className="text-xs text-gray-400">
-                    {review.createdAt ? new Date(review.createdAt.seconds * 1000).toLocaleDateString() : 'Reciente'}
                   </div>
                 </div>
 
-                <div className="flex gap-4 mb-4 text-sm bg-gray-50 p-3 rounded-lg">
-                  <div className="flex flex-col items-center">
+                {/* Calificaciones en Vertical */}
+                <div className="flex flex-col gap-2 mb-4 text-sm bg-gray-50 p-3 rounded-lg">
+                  <div className="flex justify-between items-center">
                     <span className="text-gray-500 text-xs">Rapidez</span>
                     <div className="flex text-yellow-400"><Star className="w-3 h-3 fill-current" /> <span className="text-gray-700 ml-1 font-bold">{review.ratings.speed}</span></div>
                   </div>
-                  <div className="w-px bg-gray-200"></div>
-                  <div className="flex flex-col items-center">
+                  <div className="h-px bg-gray-200 w-full"></div>
+                  <div className="flex justify-between items-center">
                     <span className="text-gray-500 text-xs">Atención</span>
                     <div className="flex text-yellow-400"><Star className="w-3 h-3 fill-current" /> <span className="text-gray-700 ml-1 font-bold">{review.ratings.service}</span></div>
                   </div>
-                  <div className="w-px bg-gray-200"></div>
-                  <div className="flex flex-col items-center">
+                  <div className="h-px bg-gray-200 w-full"></div>
+                  <div className="flex justify-between items-center">
                     <span className="text-gray-500 text-xs">Producto</span>
                     <div className="flex text-yellow-400"><Star className="w-3 h-3 fill-current" /> <span className="text-gray-700 ml-1 font-bold">{review.ratings.product}</span></div>
                   </div>
@@ -532,6 +563,12 @@ function ReviewsView({ reviews, orders, user, showNotification }) {
                 {review.comment && (
                   <p className="text-gray-600 text-sm italic">"{review.comment}"</p>
                 )}
+                
+                <div className="mt-2 text-right">
+                    <span className="text-[10px] text-gray-400">
+                        {review.createdAt ? new Date(review.createdAt.seconds * 1000).toLocaleDateString() : 'Reciente'}
+                    </span>
+                </div>
               </div>
             ))
           )}
@@ -540,8 +577,6 @@ function ReviewsView({ reviews, orders, user, showNotification }) {
     </div>
   );
 }
-
-// --- VISTAS EXISTENTES ---
 
 function StoreFront({ products, addToCart, onProductClick }) {
   const [searchTerm, setSearchTerm] = useState("");
@@ -652,19 +687,15 @@ function CheckoutView({ cart, total, clearCart, setView, user, showNotification,
   const [formData, setFormData] = useState({ name: '', email: '', phone: '' });
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Función para notificar al dueño (Telegram)
   const notifyOwner = async (orderData) => {
     if (TELEGRAM_BOT_TOKEN && TELEGRAM_USER_ID) {
         const itemsDetail = orderData.items.map(i => `• ${i.qty}x ${i.name}`).join('\n');
         const text = `🔔 *NUEVA VENTA DIGITAL*\n\n📄 *Pedido:* #${orderData.orderNumber}\n👤 *Cliente:* ${orderData.customer.name}\n📞 *Tel:* ${orderData.customer.phone}\n💰 *Total:* Q${orderData.total.toFixed(2)}\n\n🛒 *Productos:*\n${itemsDetail}`;
         const url = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage?chat_id=${TELEGRAM_USER_ID}&text=${encodeURIComponent(text)}&parse_mode=Markdown`;
-        
         try {
             const response = await fetch(url);
             if (!response.ok) console.error("Error Telegram API");
-        } catch (e) {
-            console.error("Error Telegram Network", e);
-        }
+        } catch (e) { console.error("Error Telegram Network", e); }
     }
   };
 
@@ -733,6 +764,22 @@ function OrderSuccessView({ order, onBack }) {
     window.open(`https://wa.me/${OWNER_PHONE_NUMBER}?text=${message}`, '_blank');
   };
 
+  const copyReviewsLink = () => {
+    const url = window.location.origin + '/#reviews';
+    navigator.clipboard.writeText(url).then(() => {
+        alert("Enlace de reseñas copiado al portapapeles");
+    }).catch(() => {
+        // Fallback
+        const textArea = document.createElement("textarea");
+        textArea.value = url;
+        document.body.appendChild(textArea);
+        textArea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textArea);
+        alert("Enlace de reseñas copiado");
+    });
+  };
+
   return (
     <div className="max-w-lg mx-auto bg-white p-8 rounded-2xl shadow-xl text-center mt-8">
       <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
@@ -770,7 +817,11 @@ function OrderSuccessView({ order, onBack }) {
             </button>
         </div>
         
-        <button onClick={onBack} className="text-gray-400 text-sm hover:text-gray-600 underline mt-4">
+        <button onClick={copyReviewsLink} className="text-indigo-600 text-sm hover:underline flex items-center justify-center w-full mt-4">
+            <LinkIcon className="w-4 h-4 mr-1" /> Copiar enlace para dejar reseña
+        </button>
+
+        <button onClick={onBack} className="text-gray-400 text-sm hover:text-gray-600 underline mt-2 block w-full">
             Volver a la tienda
         </button>
       </div>
@@ -819,12 +870,11 @@ function AdminDashboard({ products, orders, showNotification }) {
         </div>
       </div>
       
-      {/* Botón de prueba de Telegram para el admin */}
       {(TELEGRAM_BOT_TOKEN && TELEGRAM_USER_ID) && (
         <div className="bg-blue-50 p-4 rounded-lg flex justify-between items-center text-sm text-blue-700 border border-blue-100">
             <div className="flex items-center"><Send className="w-4 h-4 mr-2" /> Telegram Configurado</div>
             <button onClick={async () => {
-                const text = encodeURIComponent("🔔 Prueba de notificación de TiendaDigital. ¡Todo funciona!");
+                const text = encodeURIComponent("🔔 Prueba de notificación de Pixel Shop. ¡Todo funciona!");
                 try {
                     const res = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage?chat_id=${TELEGRAM_USER_ID}&text=${text}`);
                     const data = await res.json();
@@ -925,27 +975,17 @@ function OrdersManager({ orders, showNotification }) {
     if (window.confirm('¿Estás seguro de eliminar este pedido permanentemente? \nEl stock de los productos será restaurado.')) {
         try {
             const batch = writeBatch(db);
-            
-            // 1. Eliminar la orden
             const orderRef = doc(db, COLLECTION_NAME, 'data', 'orders', order.id);
             batch.delete(orderRef);
-
-            // 2. Restaurar stock de cada producto
             if (order.items && Array.isArray(order.items)) {
                 order.items.forEach(item => {
                     const productRef = doc(db, COLLECTION_NAME, 'data', 'products', item.id);
-                    batch.update(productRef, {
-                        stock: increment(item.qty)
-                    });
+                    batch.update(productRef, { stock: increment(item.qty) });
                 });
             }
-
             await batch.commit();
             showNotification("Pedido eliminado y stock restaurado", "success");
-        } catch (e) {
-            console.error(e);
-            showNotification("Error al eliminar pedido", "error");
-        }
+        } catch (e) { console.error(e); showNotification("Error al eliminar pedido", "error"); }
     }
   };
 
@@ -966,12 +1006,7 @@ function OrdersManager({ orders, showNotification }) {
           <tbody className="bg-white divide-y divide-gray-100">
             {orders.map(order => (
               <tr key={order.id} className="hover:bg-gray-50 align-top">
-                <td className="px-6 py-4 text-sm">
-                    <div className="font-bold text-gray-900">{order.customer?.name}</div>
-                    <div className="text-xs text-indigo-600 font-mono mb-1">#{order.orderNumber || order.id.slice(0,6)}</div>
-                    <div className="text-xs text-gray-500">{order.customer?.phone}</div>
-                    <div className="text-xs text-gray-400">{new Date(order.createdAt?.seconds * 1000).toLocaleDateString()}</div>
-                </td>
+                <td className="px-6 py-4 text-sm"><div className="font-bold text-gray-900">{order.customer?.name}</div><div className="text-xs text-indigo-600 font-mono mb-1">#{order.orderNumber || order.id.slice(0,6)}</div><div className="text-xs text-gray-500">{order.customer?.phone}</div><div className="text-xs text-gray-400">{new Date(order.createdAt?.seconds * 1000).toLocaleDateString()}</div></td>
                 <td className="px-6 py-4"><div className="space-y-1">{order.items?.map((item, index) => (<div key={index} className="text-sm text-gray-700 flex items-start"><span className="font-bold mr-2 text-indigo-600 bg-indigo-50 px-1.5 rounded">{item.qty}x</span><span>{item.name}</span></div>))}</div></td>
                 <td className="px-6 py-4 text-sm font-bold text-indigo-600">Q{order.total?.toFixed(2)}</td>
                 <td className="px-6 py-4 text-sm"><span className={`px-2 py-1 text-xs font-semibold rounded-full ${order.status === 'pending' ? 'bg-yellow-100 text-yellow-800' : order.status === 'shipped' ? 'bg-blue-100 text-blue-800' : 'bg-green-100 text-green-800'}`}>{order.status === 'pending' ? 'Pendiente' : order.status === 'shipped' ? 'Enviado' : 'Completado'}</span></td>
